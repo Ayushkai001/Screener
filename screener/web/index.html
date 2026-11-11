@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NSE/BSE Screener</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 12 5 7l3 3 6-7' fill='none' stroke='%232f81f7' stroke-width='2'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #0f1117; --panel: #161a23; --panel2: #1c2130; --line: #262c3b; --text: #d6dae3;
+  --muted: #8790a3; --accent: #3d8bfd; --up: #22ab94; --down: #f23645; --warn: #f5a524;
+  --flash-up: rgba(34,171,148,.28); --flash-down: rgba(242,54,69,.28); --row-hover: #1e2433;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+:root[data-theme="light"] {
+  --bg: #f6f7f9; --panel: #ffffff; --panel2: #f0f2f5; --line: #e1e4ea; --text: #131722;
+  --muted: #6a7187; --accent: #2962ff; --up: #089981; --down: #e0293b; --warn: #b7791f;
+  --flash-up: rgba(8,153,129,.18); --flash-down: rgba(224,41,59,.18); --row-hover: #f1f4fa;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.app { display: flex; flex-direction: column; height: 100%; }
+header { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: var(--panel);
+  border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+header h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+.pill { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+  background: var(--panel2); color: var(--muted); border: 1px solid var(--line); }
+.pill.open { color: var(--up); border-color: var(--up); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
+.stats { color: var(--muted); font-size: 12px; display: flex; gap: 14px; flex-wrap: wrap; }
+.stats b { color: var(--text); font-weight: 600; }
+.spacer { flex: 1; }
+.nav a { color: var(--muted); text-decoration: none; padding: 4px 10px; border-radius: 6px; }
+.nav a.on { color: var(--text); background: var(--panel2); }
+.nav a:hover { color: var(--text); }
+.conn { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.conn.live { background: var(--up); box-shadow: 0 0 6px var(--up); }
+.conn.bad { background: var(--down); }
+.bar { display: flex; gap: 8px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+  align-items: flex-start; flex-wrap: wrap; }
+#filter { flex: 1 1 420px; min-height: 34px; max-height: 120px; resize: vertical; padding: 7px 10px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font-family: var(--mono); font-size: 12.5px; }
+#filter:focus { outline: none; border-color: var(--accent); }
+.btn { padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel2);
+  cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.on { border-color: var(--up); color: var(--up); }
+select.btn { padding: 6px 8px; }
+.err { color: var(--down); padding: 0 16px 8px; background: var(--panel); font-family: var(--mono); font-size: 12px;
+  border-bottom: 1px solid var(--line); }
+.err:empty { display: none; }
+.warnbar { color: var(--warn); padding: 6px 16px; background: var(--panel2); font-size: 12px; border-bottom: 1px solid var(--line); }
+.warnbar:empty { display: none; }
+.main { flex: 1; display: flex; min-height: 0; }
+.tablewrap { flex: 1; overflow: auto; }
+table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; text-align: right; }
+th { position: sticky; top: 0; background: var(--panel); z-index: 1; font-weight: 600; color: var(--muted);
+  font-size: 11.5px; cursor: pointer; user-select: none; }
+th:hover { color: var(--text); }
+th.sorted { color: var(--accent); }
+th.text, td.text { text-align: left; }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: var(--row-hover); }
+tbody tr.sel td { background: var(--panel2); }
+td.up { color: var(--up); } td.down { color: var(--down); }
+td.sym { font-weight: 650; text-align: left; }
+.ex { font-size: 9.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; margin-left: 6px;
+  font-weight: 500; vertical-align: 1px; }
+.badge { font-size: 10px; margin-left: 4px; color: var(--warn); }
+td.fu { animation: fu 1.2s ease-out; } td.fd { animation: fd 1.2s ease-out; }
+@keyframes fu { from { background: var(--flash-up); } to { background: transparent; } }
+@keyframes fd { from { background: var(--flash-down); } to { background: transparent; } }
+tr.new td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.empty { padding: 40px; text-align: center; color: var(--muted); }
+aside { width: 360px; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 14px 16px; }
+aside[hidden] { display: none; }
+aside h2 { margin: 0 0 2px; font-size: 18px; }
+aside .sub { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+aside .big { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+aside dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; margin: 12px 0; font-size: 12.5px; }
+aside dt { color: var(--muted); } aside dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+aside svg { width: 100%; height: 180px; display: block; margin-top: 8px; }
+.pop { position: absolute; z-index: 10; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px; max-height: 70vh; overflow: auto; width: min(720px, calc(100vw - 32px)); box-shadow: 0 8px 30px rgba(0,0,0,.35);
+  columns: 3 200px; }
+.pop[hidden] { display: none; }
+.pop .grp { break-inside: avoid; margin-bottom: 10px; }
+.pop .grp b { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+.pop label { display: block; font-size: 12.5px; padding: 1px 0; cursor: pointer; }
+.help { color: var(--muted); font-size: 11.5px; padding: 0 16px 8px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.help code { font-family: var(--mono); color: var(--text); background: var(--panel2); padding: 0 4px; border-radius: 3px; }
+#toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; z-index: 20; }
+.toast { background: var(--panel2); border: 1px solid var(--accent); border-radius: 6px; padding: 8px 12px; font-size: 12.5px;
+  max-width: 320px; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
+footer { padding: 4px 16px; color: var(--muted); font-size: 11px; border-top: 1px solid var(--line); background: var(--panel);
+  display: flex; gap: 12px; flex-wrap: wrap; }
+@media (max-width: 760px) {
+  aside { position: fixed; inset: 0; width: auto; z-index: 15; }
+  header, .bar { padding-left: 16px; padding-right: 16px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>NSE · BSE</h1>
+    <nav class="nav"><a href="/" class="on">Screener</a><a href="/backtest" id="btLink" title="Backtest the current filter">Backtest</a></nav>
+    <span id="market" class="pill">…</span>
+    <span class="conn" id="conn" title="stream"></span>
+    <div class="stats" id="stats"></div>
+    <div class="spacer"></div>
+    <button class="btn" id="theme" title="Toggle theme">◐</button>
+  </header>
+  <div class="bar">
+    <select class="btn" id="presets"><option value="">Presets…</option></select>
+    <textarea id="filter" rows="1" spellcheck="false" placeholder='e.g.  rsi14 < 30 and price > sma200 and turnover > 5cr'></textarea>
+    <button class="btn primary" id="apply">Apply ⏎</button>
+    <button class="btn" id="colsBtn">Columns</button>
+    <select class="btn" id="limit" title="Rows">
+      <option>50</option><option selected>200</option><option>500</option><option>2000</option>
+    </select>
+    <button class="btn" id="alerts" title="Notify when a stock newly matches">🔔 Alerts off</button>
+    <button class="btn" id="helpBtn">?</button>
+  </div>
+  <div class="help" id="help" hidden>
+    Fields: click <b>Columns</b> to see all. Operators: <code>and or not</code> <code>&lt; &lt;= &gt; &gt;= == !=</code>
+    <code>+ - * /</code> <code>in [..]</code>, chains like <code>30 &lt; rsi14 &lt; 70</code>.
+    Numbers: <code>5k</code> <code>10L</code> <code>2cr</code>. Functions: <code>crosses_above(ema9, ema21)</code>
+    <code>crosses_below(a,b)</code> <code>abs()</code> <code>min()</code> <code>max()</code> <code>pct(a,b)</code>
+    <code>contains(name,"bank")</code>. Text: <code>exchange == "NSE"</code>, <code>"NIFTY50" in indices</code>.
+    A field without a value (too little history) never matches. Ctrl/⌘+Enter applies.
+  </div>
+  <div class="err" id="err"></div>
+  <div class="warnbar" id="warn"></div>
+  <div class="pop" id="cols" hidden></div>
+  <div class="main">
+    <div class="tablewrap" id="wrap">
+      <table><thead><tr id="head"></tr></thead><tbody id="body"></tbody></table>
+      <div class="empty" id="empty" hidden>No stocks match this filter.</div>
+    </div>
+    <aside id="detail" hidden></aside>
+  </div>
+  <footer>
+    <span id="foot"></span><span class="spacer"></span>
+    <span>Yahoo Finance quotes, polled (not tick-by-tick). Not investment advice.</span>
+  </footer>
+</div>
+<div id="toasts"></div>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("scr." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("scr." + k, JSON.stringify(v)); } catch {} },
+};
+let badFilter = false;
+let META = null, es = null, state = null, lastRows = new Map(), prevMatch = null, selected = null;
+const DEFAULT = { filter: "turnover > 5cr", sort: "change_pct", desc: true, limit: 200, cols: null };
+
+function loadState() {
+  let s = Object.assign({}, DEFAULT, store.get("state", {}));
+  try {
+    if (location.hash.length > 1) Object.assign(s, JSON.parse(decodeURIComponent(location.hash.slice(1))));
+  } catch {}
+  return s;
+}
+function saveState() {
+  store.set("state", state);
+  $("btLink").href = "/backtest#entry=" + encodeURIComponent(state.filter);
+  history.replaceState(null, "", "#" + encodeURIComponent(JSON.stringify(state)));
+}
+
+// ---------- formatting (Indian conventions) ----------
+const nf2 = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function fmt(v, f) {
+  if (v === null || v === undefined) return "—";
+  switch (f) {
+    case "price": return nf2.format(v);
+    case "pct": return (v > 0 ? "+" : "") + v.toFixed(2) + "%";
+    case "vol": return v >= 1e7 ? (v / 1e7).toFixed(2) + " Cr" : v >= 1e5 ? (v / 1e5).toFixed(2) + " L" : Math.round(v).toLocaleString("en-IN");
+    case "money": return v >= 1e7 ? "₹" + (v / 1e7).toFixed(2) + " Cr" : "₹" + (v / 1e5).toFixed(2) + " L";
+    case "ratio": return v.toFixed(2);
+    case "int": return Math.round(v).toLocaleString("en-IN");
+    case "num": return Math.abs(v) >= 1000 ? nf2.format(v) : v.toFixed(2);
+    case "bool": return v ? "✓" : "";
+    case "list": return (v || []).join(", ");
+    default: return String(v);
+  }
+}
+function tone(col, v) {
+  if (typeof v !== "number") return "";
+  if (["change", "change_pct", "gap_pct", "chg_from_open", "macd_hist"].includes(col) || col.startsWith("chg_"))
+    return v > 0 ? "up" : v < 0 ? "down" : "";
+  return "";
+}
+
+// ---------- columns ----------
+function columns() { return state.cols || META.default_columns; }
+function buildColsPopover() {
+  const groups = {};
+  for (const [k, f] of Object.entries(META.fields)) (groups[f.group] ||= []).push([k, f]);
+  const el = $("cols"); el.innerHTML = "";
+  for (const [g, items] of Object.entries(groups)) {
+    const d = document.createElement("div"); d.className = "grp";
+    d.innerHTML = `<b>${g}</b>`;
+    for (const [k, f] of items) {
+      const l = document.createElement("label");
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = columns().includes(k);
+      cb.onchange = () => {
+        let c = columns().slice();
+        if (cb.checked && !c.includes(k)) c.push(k); else c = c.filter((x) => x !== k);
+        if (!c.includes("sym")) c.unshift("sym");
+        state.cols = c; connect();
+      };
+      l.append(cb, " " + f.label + " ");
+      const code = document.createElement("span"); code.style.color = "var(--muted)"; code.style.fontSize = "11px";
+      code.textContent = k; l.append(code);
+      d.append(l);
+    }
+    el.append(d);
+  }
+}
+
+// ---------- stream ----------
+function params() {
+  // the sort column is always shown: rows ordered by an invisible field
+  // (a preset sorting by db_score) look randomly ordered
+  const cols = columns().includes(state.sort) ? columns() : [...columns().slice(0, 3), state.sort, ...columns().slice(3)];
+  return new URLSearchParams({ filter: state.filter, sort: state.sort, desc: state.desc ? "1" : "0",
+    limit: String(state.limit), cols: cols.join(",") });
+}
+async function connect() {
+  if (es) { es.close(); es = null; }
+  $("err").textContent = "";
+  // validate first: EventSource hides HTTP errors (a 400 just looks like a disconnect)
+  try {
+    const r = await fetch("/api/screen?" + params());
+    const j = await r.json();
+    if (!r.ok) {
+      // Not persisted: a reload returns to the last filter the server
+      // accepted instead of a blank page. The text stays here to be fixed.
+      $("err").textContent = j.error || "error"; setConn("bad"); badFilter = true;
+      fetch("/api/status").then((x) => x.json()).then((s) => renderStatus({ status: s, matched: 0, total: s.quoted })).catch(() => {});
+      return;
+    }
+    badFilter = false;
+    saveState();
+    render(j);
+  } catch (e) { $("err").textContent = "Server unreachable: " + e; setConn("bad"); setTimeout(connect, 3000); return; }
+  prevMatch = null;
+  es = new EventSource("/api/stream?" + params());
+  es.addEventListener("table", (ev) => { setConn("live"); render(JSON.parse(ev.data)); });
+  es.onerror = () => setConn("bad");   // EventSource retries by itself
+}
+function setConn(s) { $("conn").className = "conn " + s; $("conn").title = s === "live" ? "live" : "reconnecting"; }
+
+// ---------- render ----------
+function renderHead(cols) {
+  const tr = $("head"); tr.innerHTML = "";
+  for (const c of cols) {
+    if (["ysym", "exchange", "age", "hist_ok", "note"].includes(c) && c !== state.sort) continue;
+    const f = META.fields[c] || { label: c, fmt: "" };
+    const th = document.createElement("th");
+    th.textContent = f.label + (state.sort === c ? (state.desc ? " ▼" : " ▲") : "");
+    th.title = c;
+    if (["text", "list"].includes(f.fmt) || c === "sym") th.className = "text";
+    if (state.sort === c) th.classList.add("sorted");
+    th.onclick = () => {
+      if (state.sort === c) state.desc = !state.desc; else { state.sort = c; state.desc = f.fmt !== "text"; }
+      connect();
+    };
+    tr.append(th);
+  }
+}
+let headKey = "";
+function render(res) {
+  const cols = res.columns;
+  const shown = cols.filter((c) => !(["ysym", "exchange", "age", "hist_ok", "note"].includes(c) && c !== state.sort));
+  const key = shown.join(",") + "|" + state.sort + state.desc;
+  if (key !== headKey) { renderHead(cols); headKey = key; lastRows = new Map(); $("body").innerHTML = ""; }
+  const ix = Object.fromEntries(cols.map((c, i) => [c, i]));
+  const body = $("body");
+  const existing = new Map([...body.children].map((tr) => [tr.dataset.y, tr]));
+  const seen = new Set();
+  const nowMatch = new Set(res.ysyms);
+  const open = res.status.market === "open";
+  for (const r of res.rows) {
+    const y = r[ix.ysym]; seen.add(y);
+    let tr = existing.get(y);
+    const prev = lastRows.get(y);
+    if (!tr) {
+      tr = document.createElement("tr"); tr.dataset.y = y;
+      for (const c of shown) { const td = document.createElement("td"); tr.append(td); }
+      tr.onclick = () => showDetail(y);
+      if (prevMatch && !prevMatch.has(y)) tr.classList.add("new");
+    }
+    tr.classList.toggle("sel", y === selected);
+    shown.forEach((c, k) => {
+      const v = r[ix[c]], td = tr.children[k];
+      const f = (META.fields[c] || {}).fmt;
+      const old = prev ? prev[ix[c]] : undefined;
+      if (prev && v === old && td.dataset.init) return;
+      td.dataset.init = "1";
+      if (c === "sym") {
+        td.className = "sym";
+        td.innerHTML = "";
+        td.append(document.createTextNode(v));
+        const ex = document.createElement("span"); ex.className = "ex"; ex.textContent = r[ix.exchange]; td.append(ex);
+        if (!r[ix.hist_ok]) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "⚠"; b.title = r[ix.note] || "indicators unavailable"; td.append(b); }
+        if (open && r[ix.age] > 300) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "stale"; b.title = "last trade " + ago(Date.now() / 1000 - r[ix.age]) + " ago"; td.append(b); }
+        return;
+      }
+      td.textContent = fmt(v, f);
+      td.className = (["text", "list"].includes(f) ? "text " : "") + tone(c, v);
+      if (prev && typeof v === "number" && typeof old === "number" && v !== old) {
+        td.classList.remove("fu", "fd"); void td.offsetWidth; td.classList.add(v > old ? "fu" : "fd");
+      }
+    });
+    body.append(tr);  // append moves it: rows end up in result order
+  }
+  for (const [y, tr] of existing) if (!seen.has(y)) tr.remove();
+  lastRows = new Map(res.rows.map((r) => [r[ix.ysym], r]));
+  $("empty").hidden = res.rows.length > 0;
+  if (prevMatch && alertsOn) {
+    const added = res.ysyms.filter((y) => !prevMatch.has(y));
+    if (added.length && added.length <= 20) notify(added.map((y) => y.replace(/\.(NS|BO)$/, "")));
+  }
+  prevMatch = nowMatch;
+  renderStatus(res);
+  if (selected && nowMatch.has(selected)) refreshDetailRow(res, ix);
+}
+function ago(t) {
+  if (!t) return "—";
+  const s = Math.max(0, Math.round(Date.now() / 1000 - t));
+  if (s < 60) return s + "s";
+  if (s < 5400) return Math.round(s / 60) + "m";
+  if (s < 172800) return Math.round(s / 3600) + "h";
+  return Math.round(s / 86400) + "d";
+}
+function renderStatus(res) {
+  const s = res.status;
+  const m = $("market"); m.textContent = s.market.replace("_", " ");
+  m.className = "pill " + (s.market === "open" ? "open" : s.calendar_warning ? "warn" : "");
+  $("stats").innerHTML =
+    `<span>matched <b>${res.matched.toLocaleString("en-IN")}</b> of ${res.total.toLocaleString("en-IN")}</span>` +
+    `<span>indicators <b>${s.with_indicators.toLocaleString("en-IN")}</b></span>` +
+    `<span>sweep <b>${s.sweep_secs ?? "…"}s</b>, ${ago(s.last_sweep_end)} ago</span>` +
+    (s.history_queue ? `<span>history syncing <b>${s.history_queue.toLocaleString("en-IN")}</b> left</span>` : "") +
+    `<span>${s.rate} req/s${s.limiter["429"] ? `, ${s.limiter["429"]}×429` : ""}</span>`;
+  $("warn").textContent = s.calendar_warning || "";
+  $("foot").textContent = "IST " + String(s.now).replace("T", " ").slice(0, 19) + (s.errors.length ? "  ·  last error: " + s.errors[s.errors.length - 1].msg : "");
+}
+
+// ---------- detail ----------
+async function showDetail(y) {
+  selected = y;
+  for (const tr of $("body").children) tr.classList.toggle("sel", tr.dataset.y === y);
+  const r = await fetch("/api/symbol?ysym=" + encodeURIComponent(y));
+  if (!r.ok) return;
+  const j = await r.json();
+  const a = $("detail"); a.hidden = false;
+  const row = j.row, F = META.fields;
+  const pick = ["prev_close", "open", "high", "low", "volume", "avg_vol20", "rvol_tod", "turnover", "rsi14", "macd_hist",
+    "adx14", "atr_pct", "sma20", "sma50", "sma200", "ema21", "high_52w", "low_52w", "from_52w_high", "chg_1m", "chg_3m",
+    "chg_1y"];
+  if (row.db_neckline) pick.push("db_score", "db_l1_date", "db_l2_date", "db_neckline", "db_days_since_breakout",
+    "db_entry", "db_stop", "db_risk_pct", "db_target_1r", "db_target_2r", "db_target");
+  const pats = Object.entries(F).filter(([k, f]) => f.fmt === "bool" && f.group === "Patterns" && row[k]).map(([k, f]) => f.label);
+  a.innerHTML = `<button class="btn" style="float:right" id="close">✕</button>
+    <h2>${esc(row.sym)} <span class="ex">${esc(row.exchange)}</span></h2>
+    <div class="sub">${esc(row.name || "")}${row.industry ? " · " + esc(row.industry) : ""}</div>
+    <div class="big" id="dprice">${fmt(row.price, "price")} <span class="${tone("change_pct", row.change_pct)}" style="font-size:14px">${fmt(row.change_pct, "pct")}</span></div>
+    <div class="sub">session ${esc(row.session)} · last trade ${ago(row.time)} ago · ${row.official_eod ? "official EOD (exchange bhavcopy)" : "Yahoo quote"}${row.note ? " · ⚠ " + esc(row.note) : ""}</div>
+    ${chart(j.bars, row)}
+    ${pats.length ? `<div class="sub" style="margin-top:8px">Patterns: <b>${pats.map(esc).join(", ")}</b></div>` : ""}
+    <dl>${pick.filter((k) => F[k]).map((k) => `<dt>${F[k].label}</dt><dd class="${tone(k, row[k])}">${fmt(row[k], F[k].fmt)}</dd>`).join("")}</dl>
+    <div class="sub">${(row.indices || []).map(esc).join(" · ")}</div>`;
+  $("close").onclick = () => { a.hidden = true; selected = null; for (const tr of $("body").children) tr.classList.remove("sel"); };
+}
+function refreshDetailRow(res, ix) {
+  const r = res.rows.find((x) => x[ix.ysym] === selected); const el = $("dprice");
+  if (!r || !el || ix.price === undefined) return;
+  el.firstChild.textContent = fmt(r[ix.price], "price") + " ";
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function chart(bars, row) {
+  if (!bars || bars.length < 2) return '<div class="sub">No daily history yet.</div>';
+  const W = 330, H = 180, P = 4;
+  const data = bars.slice(-90);
+  if (row.session && data[data.length - 1][0] < row.session && row.price) {
+    data.push([row.session, row.open ?? row.price, row.high ?? row.price, row.low ?? row.price, row.price, row.volume ?? 0]);
+  }
+  // with a W, the plan's stop and target are in view too
+  const lv = row.db_neckline ? [row.db_stop, row.db_target].filter((v) => v != null) : [];
+  const hi = Math.max(...data.map((b) => b[2]), ...lv), lo = Math.min(...data.map((b) => b[3]), ...lv);
+  const y = (v) => P + (H - 2 * P) * (1 - (v - lo) / (hi - lo || 1));
+  const w = (W - 2 * P) / data.length;
+  let s = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Daily candles">`;
+  data.forEach((b, i) => {
+    const x = P + i * w + w / 2, up = b[4] >= b[1], c = up ? "var(--up)" : "var(--down)";
+    s += `<line x1="${x}" x2="${x}" y1="${y(b[2])}" y2="${y(b[3])}" stroke="${c}" stroke-width="1"/>`;
+    const top = y(Math.max(b[1], b[4])), bot = y(Math.min(b[1], b[4]));
+    s += `<rect x="${x - w * 0.35}" y="${top}" width="${w * 0.7}" height="${Math.max(1, bot - top)}" fill="${c}"/>`;
+  });
+  if (row.db_neckline) {
+    const hl = (v, c, t) => v == null ? "" :
+      `<line x1="0" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="${c}" stroke-dasharray="4 3"><title>${t} ${fmt(v, "price")}</title></line>`;
+    s += hl(row.db_neckline, "var(--warn)", "neckline") + hl(row.db_stop, "var(--down)", "stop") + hl(row.db_target, "var(--up)", "target");
+    for (const d of [row.db_l1_date, row.db_l2_date]) {      // mark the two troughs
+      const i = data.findIndex((b) => b[0] === d);
+      if (i >= 0) s += `<circle cx="${P + i * w + w / 2}" cy="${y(data[i][3]) + 5}" r="3" fill="var(--warn)"><title>trough ${d}</title></circle>`;
+    }
+  }
+  return s + "</svg>";
+}
+
+// ---------- alerts ----------
+let alertsOn = store.get("alerts", false);
+function setAlertsBtn() { $("alerts").textContent = alertsOn ? "🔔 Alerts on" : "🔔 Alerts off"; $("alerts").classList.toggle("on", alertsOn); }
+function notify(syms) {
+  const msg = "New match: " + syms.join(", ");
+  const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+  $("toasts").append(t); setTimeout(() => t.remove(), 8000);
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = 880; g.gain.value = 0.05; o.start(); o.stop(ctx.currentTime + 0.15);
+  } catch {}
+  try { if (Notification.permission === "granted" && document.hidden) new Notification("Screener", { body: msg }); } catch {}
+}
+
+// ---------- wiring ----------
+function applyFilter() { state.filter = $("filter").value.trim(); connect(); }
+async function init() {
+  state = loadState();
+  const theme = store.get("theme", matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+  document.documentElement.dataset.theme = theme;
+  META = await (await fetch("/api/meta")).json();
+  state.cols = state.cols && state.cols.filter((c) => META.fields[c]).length ? state.cols.filter((c) => META.fields[c]) : null;
+  for (const p of META.presets) { const o = document.createElement("option"); o.value = p.name; o.textContent = p.name; $("presets").append(o); }
+  $("presets").onchange = (e) => {
+    const p = META.presets.find((x) => x.name === e.target.value); if (!p) return;
+    state.filter = p.filter; state.sort = p.sort; state.desc = p.desc; $("filter").value = p.filter;
+    e.target.value = ""; connect();
+  };
+  $("filter").value = state.filter;
+  $("limit").value = String(state.limit);
+  $("apply").onclick = applyFilter;
+  $("filter").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey || !e.shiftKey)) { e.preventDefault(); applyFilter(); }
+  });
+  $("limit").onchange = (e) => { state.limit = +e.target.value; connect(); };
+  $("colsBtn").onclick = (e) => {
+    const p = $("cols"); if (!p.hidden) { p.hidden = true; return; }
+    buildColsPopover(); const r = e.target.getBoundingClientRect();
+    // measure while shown (a hidden element is 0 px wide), then place it
+    p.style.visibility = "hidden"; p.hidden = false;
+    p.style.top = (r.bottom + 6) + "px"; p.style.left = Math.max(16, Math.min(r.left, innerWidth - p.offsetWidth - 16)) + "px";
+    p.style.visibility = "";
+  };
+  document.addEventListener("click", (e) => { if (!$("cols").contains(e.target) && e.target !== $("colsBtn")) $("cols").hidden = true; });
+  $("helpBtn").onclick = () => { $("help").hidden = !$("help").hidden; };
+  $("theme").onclick = () => {
+    const t = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = t; store.set("theme", t);
+  };
+  setAlertsBtn();
+  $("alerts").onclick = async () => {
+    alertsOn = !alertsOn; store.set("alerts", alertsOn); setAlertsBtn();
+    try { if (alertsOn && Notification.permission === "default") await Notification.requestPermission(); } catch {}
+  };
+  // watchdog: reopen a dead stream, but never re-send a filter the server rejected
+  setInterval(() => { if (!badFilter && (!es || es.readyState === 2)) connect(); }, 10000);
+  connect();
+}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strategy Backtester</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 12 5 7l3 3 6-7' fill='none' stroke='%232f81f7' stroke-width='2'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #0f1117; --panel: #161a23; --panel2: #1c2130; --line: #262c3b; --text: #d6dae3;
+  --muted: #8790a3; --accent: #3d8bfd; --up: #22ab94; --down: #f23645; --warn: #f5a524;
+  --s1: #3987e5; --s2: #d95926; --grid: #232938; --row-hover: #1e2433;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+:root[data-theme="light"] {
+  --bg: #f6f7f9; --panel: #ffffff; --panel2: #f0f2f5; --line: #e1e4ea; --text: #131722;
+  --muted: #6a7187; --accent: #2962ff; --up: #089981; --down: #e0293b; --warn: #b7791f;
+  --s1: #2a78d6; --s2: #eb6834; --grid: #eceef2; --row-hover: #f1f4fa;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text);
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+button, input, select, textarea { font: inherit; color: inherit; }
+header { display: flex; align-items: center; gap: 14px; padding: 8px 16px; background: var(--panel);
+  border-bottom: 1px solid var(--line); flex-wrap: wrap; position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 15px; margin: 0; font-weight: 650; }
+nav a { color: var(--muted); text-decoration: none; padding: 4px 10px; border-radius: 6px; }
+nav a.on { color: var(--text); background: var(--panel2); }
+nav a:hover { color: var(--text); }
+.spacer { flex: 1; }
+.btn { padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel2);
+  cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); }
+a.btn { color: var(--text); text-decoration: none; display: inline-block; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn:disabled { opacity: .55; cursor: default; }
+.layout { display: grid; grid-template-columns: 380px minmax(0, 1fr); min-height: calc(100vh - 49px); }
+form { background: var(--panel); border-right: 1px solid var(--line); padding: 14px 16px 24px; }
+fieldset { border: 0; border-top: 1px solid var(--line); margin: 0; padding: 12px 0 4px; }
+fieldset:first-of-type { border-top: 0; padding-top: 0; }
+legend { font-size: 11px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; padding: 0; margin-bottom: 6px; }
+label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 3px; }
+input[type=text], input[type=number], input[type=date], select, textarea {
+  width: 100%; padding: 6px 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; min-height: 64px; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.pair { display: grid; grid-template-columns: 110px 1fr; gap: 6px; }
+.check { display: flex; gap: 14px; margin-top: 4px; }
+.check label { display: flex; align-items: center; gap: 5px; margin: 0; color: var(--text); font-size: 12.5px; }
+.hint { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
+.hint code, .note code { font-family: var(--mono); background: var(--panel2); padding: 0 4px; border-radius: 3px; color: var(--text); }
+details summary { cursor: pointer; color: var(--muted); font-size: 12px; margin-top: 8px; }
+.runbar { position: sticky; bottom: 0; background: var(--panel); padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line); }
+.progress { height: 4px; background: var(--panel2); border-radius: 2px; overflow: hidden; margin-top: 10px; }
+.progress div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+.err { color: var(--down); font-family: var(--mono); font-size: 12px; margin-top: 8px; white-space: pre-wrap; }
+.err:empty { display: none; }
+main { padding: 16px 20px 40px; min-width: 0; }
+.placeholder { color: var(--muted); max-width: 640px; line-height: 1.6; }
+.placeholder h2 { color: var(--text); font-size: 18px; margin: 4px 0 8px; }
+.notes { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 6px;
+  padding: 8px 12px; margin-bottom: 14px; font-size: 12.5px; }
+.notes div { padding: 2px 0; }
+.title { font-family: var(--mono); font-size: 12.5px; color: var(--muted); margin-bottom: 12px; word-break: break-word; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.tile .k { color: var(--muted); font-size: 11.5px; }
+.tile .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.tile .s { color: var(--muted); font-size: 11.5px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; }
+.card h3 { margin: 0 0 2px; font-size: 13.5px; }
+.card .sub { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 4px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 6px; }
+.legend i.dash { background: repeating-linear-gradient(90deg, var(--s2) 0 5px, transparent 5px 8px); }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; }
+.tip { position: absolute; pointer-events: none; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 9px; font-size: 12px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.25); font-variant-numeric: tabular-nums; }
+.tip[hidden] { display: none; }
+.tip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.grid2 .card { margin-bottom: 0; }
+table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: 11.5px; position: sticky; top: 0; background: var(--panel); cursor: pointer; user-select: none; }
+th.sorted { color: var(--accent); }
+th.text, td.text { text-align: left; }
+tbody tr:hover td { background: var(--row-hover); }
+td.up { color: var(--up); } td.down { color: var(--down); }
+.tablewrap { max-height: 520px; overflow: auto; }
+.toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 5px 10px; cursor: pointer; color: var(--muted); }
+.seg button.on { background: var(--panel2); color: var(--text); }
+.runs td { cursor: pointer; }
+.runs td.rule { font-family: var(--mono); font-size: 12px; max-width: 360px; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.foot { color: var(--muted); font-size: 11.5px; margin-top: 20px; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  form { border-right: 0; border-bottom: 1px solid var(--line); }
+  main { padding: 16px; }
+  .runbar { position: static; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>NSE · BSE</h1>
+  <nav><a href="/">Screener</a><a href="/backtest" class="on">Backtest</a></nav>
+  <div class="spacer"></div>
+  <button class="btn" id="theme" title="Toggle theme" aria-label="Toggle theme">◐</button>
+</header>
+<div class="layout">
+<form id="f" autocomplete="off" novalidate>
+  <fieldset>
+    <legend>Entry</legend>
+    <select id="preset" aria-label="Start from a screener preset"><option value="">Start from a screener preset…</option></select>
+    <label for="entry">Entry rule (evaluated at each day's close)</label>
+    <textarea id="entry" spellcheck="false" placeholder="crosses_above(ema9, ema21) and price > sma200 and turnover > 5cr"></textarea>
+    <div class="hint">Same language as the screener. Example: <code>double_bottom and turnover &gt; 1cr</code></div>
+    <label for="entry_mode">Fill</label>
+    <select id="entry_mode">
+      <option value="next_open">Next day's open</option>
+      <option value="buy_stop">Buy stop: next day(s) when price reaches a level</option>
+      <option value="signal_close">Signal day's close (optimistic)</option>
+    </select>
+    <div id="bs" hidden>
+      <div class="row">
+        <div><label for="entry_level">Level</label><input type="text" id="entry_level" value="high"></div>
+        <div><label for="entry_valid_days">Valid for (days)</label><input type="number" id="entry_valid_days" min="1" value="1"></div>
+      </div>
+      <div class="hint">e.g. <code>high</code>, <code>db_neckline</code>, <code>high_20d</code></div>
+    </div>
+    <label for="max_gap_pct">Skip if it opens more than … % above</label>
+    <input type="number" id="max_gap_pct" step="any" placeholder="no limit">
+  </fieldset>
+  <fieldset>
+    <legend>Exit</legend>
+    <label>Stop loss</label>
+    <div class="pair">
+      <select id="stop_k"><option value="atr">× ATR</option><option value="pct">%</option><option value="expr">level</option><option value="none">none</option></select>
+      <input type="text" id="stop_v" value="2">
+    </div>
+    <label>Target</label>
+    <div class="pair">
+      <select id="target_k"><option value="r">× risk (R)</option><option value="pct">%</option><option value="atr">× ATR</option><option value="expr">level</option><option value="none">none</option></select>
+      <input type="text" id="target_v" value="2">
+    </div>
+    <div class="hint">Levels are expressions on the signal day: <code>low</code>, <code>db_stop</code>, <code>db_target</code>, <code>low - 0.5 * atr14</code></div>
+    <label>Trailing stop (from the highest high)</label>
+    <div class="pair">
+      <select id="trail_k"><option value="none">none</option><option value="atr">× ATR</option><option value="pct">%</option></select>
+      <input type="text" id="trail_v" value="3">
+    </div>
+    <div class="row">
+      <div><label for="max_hold">Max days in trade</label><input type="number" id="max_hold" min="0" value="20"></div>
+      <div><label for="exit">Exit rule (next open)</label><input type="text" id="exit" spellcheck="false" placeholder="price < ema21"></div>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>Stocks &amp; period</legend>
+    <div class="check">
+      <label><input type="checkbox" id="ex_nse" checked> NSE</label>
+      <label><input type="checkbox" id="ex_bse" checked> BSE</label>
+    </div>
+    <div class="row">
+      <div><label for="start">From</label><input type="date" id="start"></div>
+      <div><label for="end">To</label><input type="date" id="end"></div>
+    </div>
+    <label for="min_turnover">Min ₹ traded on the signal day</label>
+    <input type="text" id="min_turnover" value="1cr">
+  </fieldset>
+  <fieldset>
+    <legend>Portfolio</legend>
+    <div class="row">
+      <div><label for="capital">Capital (₹)</label><input type="text" id="capital" value="10L"></div>
+      <div><label for="max_positions">Max positions</label><input type="number" id="max_positions" min="1" value="10"></div>
+    </div>
+    <div class="row">
+      <div><label for="sizing">Sizing</label>
+        <select id="sizing"><option value="risk">Risk % per trade</option><option value="equal">Equal weight</option></select></div>
+      <div><label for="risk_pct">Risk per trade %</label><input type="number" id="risk_pct" step="any" min="0.05" value="1"></div>
+    </div>
+    <div class="row">
+      <div><label for="max_alloc_pct">Max % in one stock</label><input type="number" id="max_alloc_pct" min="1" value="20"></div>
+      <div><label for="rank">When slots are full, prefer</label><select id="rank"></select></div>
+    </div>
+    <details>
+      <summary>Costs (delivery; Nov 2026 rates)</summary>
+      <div class="row3">
+        <div><label for="slippage_pct">Slippage %/fill</label><input type="number" id="slippage_pct" step="any" value="0.05"></div>
+        <div><label for="brokerage_pct">Brokerage %</label><input type="number" id="brokerage_pct" step="any" value="0"></div>
+        <div><label for="dp_flat">DP ₹/sell</label><input type="number" id="dp_flat" step="any" value="23.6"></div>
+      </div>
+      <div class="hint">Also applied: STT 0.1% both sides, stamp 0.015% on buys, NSE fee 0.00307% and SEBI 0.0001%, plus 18% GST on fees.</div>
+    </details>
+  </fieldset>
+  <div class="runbar">
+    <button class="btn primary" id="run" type="submit" style="width:100%">Run backtest</button>
+    <div class="progress" id="prog" hidden><div></div></div>
+    <div class="err" id="err" role="alert"></div>
+  </div>
+</form>
+<main id="out">
+  <div class="placeholder">
+    <h2>Test a setup on 10 years of NSE &amp; BSE history</h2>
+    Write the entry rule the way you'd write a screener filter, choose how you get in and out, and run it.
+    Every rule is checked at each day's close and filled no earlier than the next session, with
+    costs, gaps through stops and untradable days accounted for.
+    <p><b>Tip:</b> first run <code>main.py bt-sync</code> once to download the 10-year history.</p>
+  </div>
+  <div class="card" id="runsCard" hidden>
+    <h3>Previous runs</h3>
+    <div class="tablewrap"><table class="runs"><thead><tr>
+      <th class="text">Rule</th><th>Trades</th><th>Expectancy R</th><th>CAGR %</th><th>Max DD %</th><th class="text">Run</th>
+    </tr></thead><tbody id="runs"></tbody></table></div>
+  </div>
+</main>
+</div>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("scr." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("scr." + k, JSON.stringify(v)); } catch {} },
+};
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const nf = (d) => new Intl.NumberFormat("en-IN", { minimumFractionDigits: d, maximumFractionDigits: d });
+const n0 = nf(0), n1 = nf(1), n2 = nf(2);
+function num(v, d = 2) { return v == null ? "—" : (d === 0 ? n0 : d === 1 ? n1 : n2).format(v); }
+function pct(v, d = 2, sign = true) { return v == null ? "—" : (sign && v > 0 ? "+" : "") + (d === 1 ? n1 : n2).format(v) + "%"; }
+function rupees(v) {
+  if (v == null) return "—";
+  const a = Math.abs(v);
+  if (a >= 1e7) return "₹" + n2.format(v / 1e7) + " Cr";
+  if (a >= 1e5) return "₹" + n2.format(v / 1e5) + " L";
+  return "₹" + n0.format(v);
+}
+function short(v) {      // 10000000 -> "1cr", 1000000 -> "10L": what a person types
+  v = +v;
+  if (!isFinite(v)) return "";
+  if (v >= 1e7 && v % 1e5 === 0) return +(v / 1e7).toFixed(2) + "cr";
+  if (v >= 1e5 && v % 1e3 === 0) return +(v / 1e5).toFixed(2) + "L";
+  return String(v);
+}
+function amount(s) {
+  const x = String(s).trim().toLowerCase().replace(/[,₹\s]/g, "");
+  const m = x.match(/^([0-9.]+)(cr|l|k)?$/);
+  if (!m) return NaN;
+  return parseFloat(m[1]) * ({ cr: 1e7, l: 1e5, k: 1e3 }[m[2]] || 1);
+}
+const tone = (v) => v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "";
+
+// ---------- theme ----------
+document.documentElement.dataset.theme = store.get("theme", "dark");
+$("theme").onclick = () => {
+  const t = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  document.documentElement.dataset.theme = t; store.set("theme", t);
+  if (lastResult) render(lastResult);
+};
+
+// ---------- form state ----------
+const FIELDS_IN = ["entry", "entry_mode", "entry_level", "entry_valid_days", "max_gap_pct", "stop_k", "stop_v",
+  "target_k", "target_v", "trail_k", "trail_v", "max_hold", "exit", "start", "end", "min_turnover", "capital",
+  "max_positions", "sizing", "risk_pct", "max_alloc_pct", "rank", "slippage_pct", "brokerage_pct", "dp_flat"];
+function readForm() {
+  const o = {};
+  for (const k of FIELDS_IN) o[k] = $(k).value;
+  o.ex_nse = $("ex_nse").checked; o.ex_bse = $("ex_bse").checked;
+  return o;
+}
+function writeForm(o) {
+  for (const k of FIELDS_IN) if (o[k] !== undefined && $(k)) $(k).value = o[k];
+  if (o.ex_nse !== undefined) $("ex_nse").checked = o.ex_nse;
+  if (o.ex_bse !== undefined) $("ex_bse").checked = o.ex_bse;
+  syncVisibility();
+}
+function syncVisibility() {
+  $("bs").hidden = $("entry_mode").value !== "buy_stop";
+  for (const k of ["stop", "target", "trail"]) $(k + "_v").disabled = $(k + "_k").value === "none";
+  $("risk_pct").disabled = $("sizing").value !== "risk";
+}
+function level(k) {
+  const kind = $(k + "_k").value, v = $(k + "_v").value.trim();
+  return kind === "none" ? "none" : kind + ":" + v;
+}
+function buildSpec() {
+  const o = readForm();
+  const ex = [o.ex_nse && "NSE", o.ex_bse && "BSE"].filter(Boolean);
+  if (!ex.length) throw new Error("pick at least one exchange");
+  const mt = amount(o.min_turnover), cap = amount(o.capital);
+  if (isNaN(mt)) throw new Error("min turnover: use a number like 1cr, 50L or 500000");
+  if (isNaN(cap)) throw new Error("capital: use a number like 10L or 1000000");
+  return {
+    entry: o.entry.trim(), entry_mode: o.entry_mode, entry_level: o.entry_level.trim() || "high",
+    entry_valid_days: +o.entry_valid_days || 1,
+    max_gap_pct: o.max_gap_pct === "" ? null : +o.max_gap_pct,
+    stop: level("stop"), target: level("target"), trail: level("trail"),
+    max_hold: +o.max_hold || 0, exit: o.exit.trim(),
+    start: o.start || null, end: o.end || null, exchanges: ex, min_turnover: mt,
+    portfolio: { capital: cap, max_positions: +o.max_positions, sizing: o.sizing, risk_pct: +o.risk_pct,
+                 max_alloc_pct: +o.max_alloc_pct, rank: o.rank, rank_desc: true },
+    costs: { slippage_pct: +o.slippage_pct, brokerage_pct: +o.brokerage_pct, dp_flat: +o.dp_flat },
+  };
+}
+
+// ---------- run ----------
+let polling = null, lastResult = null;
+$("f").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("err").textContent = "";
+  let spec;
+  try { spec = buildSpec(); } catch (x) { $("err").textContent = x.message; return; }
+  store.set("bt.form", readForm());
+  $("run").disabled = true; $("run").textContent = "Running…";
+  $("prog").hidden = false; $("prog").firstElementChild.style.width = "2%";
+  try {
+    const r = await fetch("/api/backtest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(spec) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "error " + r.status);
+    poll(j.id);
+  } catch (x) { done(); $("err").textContent = x.message; }
+});
+function done() { $("run").disabled = false; $("run").textContent = "Run backtest"; $("prog").hidden = true; clearTimeout(polling); }
+async function poll(id) {
+  try {
+    const r = await fetch("/api/backtest?id=" + encodeURIComponent(id));
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "error");
+    $("prog").firstElementChild.style.width = Math.max(2, Math.round(j.progress * 100)) + "%";
+    if (j.state === "running") { polling = setTimeout(() => poll(id), 700); return; }
+    done();
+    if (j.state === "error") { $("err").textContent = j.error; return; }
+    history.replaceState(null, "", "#run=" + encodeURIComponent(j.result_id));
+    render(j.result);
+    loadRuns();
+  } catch (x) { done(); $("err").textContent = "Lost the server: " + x.message; }
+}
+async function openRun(id) {
+  const r = await fetch("/api/backtest?id=" + encodeURIComponent(id));
+  if (!r.ok) return;
+  const j = await r.json();
+  history.replaceState(null, "", "#run=" + encodeURIComponent(id));
+  render(j.result);
+  formFromSpec(j.result.spec);
+  window.scrollTo({ top: 0 });
+}
+function formFromSpec(s) {
+  const split = (v) => { const [k, ...r] = String(v || "none").split(":"); return [k, r.join(":")]; };
+  const [sk, sv] = split(s.stop), [tk, tv] = split(s.target), [rk, rv] = split(s.trail);
+  const p = s.portfolio || {}, c = s.costs || {};
+  writeForm({ entry: s.entry, entry_mode: s.entry_mode, entry_level: s.entry_level, entry_valid_days: s.entry_valid_days,
+    max_gap_pct: s.max_gap_pct ?? "", stop_k: sk, stop_v: sv, target_k: tk, target_v: tv, trail_k: rk, trail_v: rv || "3",
+    max_hold: s.max_hold, exit: s.exit || "", start: s.start || "", end: s.end || "",
+    min_turnover: short(s.min_turnover), capital: short(p.capital), max_positions: p.max_positions, sizing: p.sizing,
+    risk_pct: p.risk_pct, max_alloc_pct: p.max_alloc_pct, rank: p.rank, slippage_pct: c.slippage_pct,
+    brokerage_pct: c.brokerage_pct, dp_flat: c.dp_flat,
+    ex_nse: (s.exchanges || []).includes("NSE"), ex_bse: (s.exchanges || []).includes("BSE") });
+}
+
+// ---------- render ----------
+function tile(k, v, s, cls = "") { return `<div class="tile"><div class="k">${k}</div><div class="v ${cls}">${v}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`; }
+function render(res) {
+  lastResult = res;
+  const ex = res.every_signal || {}, pf = res.portfolio || {}, bm = res.benchmark || {};
+  const ci = ex.expectancy_r_ci95, cip = ex.expectancy_pct_ci95;
+  const edgeNote = ci ? (ci[0] > 0 ? "95% CI above 0" : ci[1] < 0 ? "95% CI below 0" : "95% CI includes 0: could be luck") :
+    cip ? (cip[0] > 0 ? "95% CI above 0" : "95% CI includes 0") : "";
+  const s = res.spec;
+  let h = `<div class="title">${esc(s.entry)} · fill ${esc(s.entry_mode.replace("_", " "))} · stop ${esc(s.stop)} · target ${esc(s.target)}` +
+    `${s.trail !== "none" ? " · trail " + esc(s.trail) : ""}${s.max_hold ? " · max " + s.max_hold + " days" : ""}` +
+    `${s.exit ? " · exit " + esc(s.exit) : ""} · ${res.universe.toLocaleString("en-IN")} stocks · ${res.secs}s</div>`;
+  if (res.warnings && res.warnings.length) h += `<div class="notes" role="note">${res.warnings.map((w) => `<div>⚠ ${esc(w)}</div>`).join("")}</div>`;
+  if (!ex.trades) {
+    h += `<div class="card"><h3>No trades</h3><div class="sub">The rule never fired (or every signal was filtered). Signals: ${num(res.counters.signals || 0, 0)}, below the turnover floor: ${num(res.counters.below_min_turnover || 0, 0)}.</div></div>`;
+    $("out").innerHTML = h; return;
+  }
+  h += `<div class="tiles">` +
+    tile("Portfolio CAGR", pct(pf.cagr_pct), bm.cagr_pct != null ? "NIFTY 50: " + pct(bm.cagr_pct) : "", tone(pf.cagr_pct)) +
+    tile("Max drawdown", pct(pf.max_drawdown_pct, 1), bm.max_drawdown_pct != null ? "NIFTY 50: " + pct(bm.max_drawdown_pct, 1) : "", "down") +
+    tile("Sharpe", num(pf.sharpe), bm.sharpe != null ? "NIFTY 50: " + num(bm.sharpe) : "") +
+    tile("Expectancy / trade", ex.expectancy_r != null ? num(ex.expectancy_r, 2) + " R" : pct(ex.expectancy_pct),
+      (ex.expectancy_r != null ? pct(ex.expectancy_pct) + " · " : "") + edgeNote, tone(ex.expectancy_pct)) +
+    tile("Win rate", pct(ex.win_rate, 1, false), "avg win " + pct(ex.avg_win_pct, 1) + " · loss " + pct(ex.avg_loss_pct, 1)) +
+    tile("Profit factor", num(ex.profit_factor), "gross wins ÷ gross losses") +
+    tile("Trades (every signal)", num(ex.trades, 0), "avg hold " + num(ex.avg_bars, 1) + " days") +
+    tile("Taken by portfolio", num(pf.trades_taken, 0), `${num(pf.skipped?.slots || 0, 0)} skipped (slots full) · exposure ${num(pf.exposure_pct, 0)}%`) +
+    `</div>`;
+  h += `<div class="card"><h3>Equity, ${rupees(s.portfolio.capital)} start</h3>
+    <div class="sub">${esc(pf.start)} → ${esc(pf.end)} · after costs · NIFTY 50 bought and held over the same dates</div>
+    <div class="legend"><span><i style="background:var(--s1)"></i>Strategy ${rupees(pf.final)}</span>${res.bench_equity.length ? `<span><i class="dash"></i>NIFTY 50 ${rupees(res.bench_equity[res.bench_equity.length - 1][1])}</span>` : ""}</div>
+    <div class="chart" id="eqChart"></div>
+    <div class="sub" style="margin-top:10px">Drawdown from the previous peak</div>
+    <div class="chart" id="ddChart"></div></div>`;
+  h += `<div class="grid2">
+    <div class="card"><h3>Trade outcomes (R multiples)</h3><div class="sub">Every signal, after costs. 1 R = the distance from entry to the stop.</div><div class="chart" id="hist"></div></div>
+    <div class="card"><h3>By year</h3><div class="sub">Every signal, by entry year. A strategy that only works in one year is not a strategy.</div>
+      <div class="tablewrap" style="max-height:300px"><table><thead><tr><th class="text">Year</th><th>Trades</th><th>Win %</th><th>Avg %</th><th>Avg R</th></tr></thead><tbody>
+      ${res.by_year.map((y) => `<tr><td class="text">${y.year}</td><td>${num(y.trades, 0)}</td><td>${num(y.win_rate, 1)}</td><td class="${tone(y.expectancy_pct)}">${pct(y.expectancy_pct)}</td><td class="${tone(y.expectancy_r)}">${num(y.expectancy_r, 3)}</td></tr>`).join("")}
+      </tbody></table></div>
+      ${res.halves ? `<div class="sub" style="margin-top:10px">First half of the trades: ${pct(res.halves[0].expectancy_pct)} per trade, win ${num(res.halves[0].win_rate, 1)}%. Second half: ${pct(res.halves[1].expectancy_pct)}, win ${num(res.halves[1].win_rate, 1)}%.</div>` : ""}
+    </div>
+  </div>`;
+  const reasons = ex.exit_reasons || {};
+  const rlabel = { stop: "stop", target: "target", time: "time limit", rule: "exit rule", trail: "trailing stop", end: "still open at the end" };
+  h += `<div class="card" style="margin-top:16px"><h3>Trades</h3>
+    <div class="sub">Exits: ${Object.entries(reasons).map(([k, v]) => `${esc(rlabel[k] || k)} ${num(v, 0)}`).join(" · ")} ·
+      days touching stop and target counted as stops: ${num(res.counters.ambiguous || 0, 0)} · MFE/MAE = best/worst price during the trade</div>
+    <div class="toolbar"><div class="seg" role="tablist"><button type="button" class="on" data-set="taken">Taken by portfolio (${num(res.taken_total, 0)})</button><button type="button" data-set="trades">Every signal (${num(res.trades_total, 0)})</button></div>
+      <span class="spacer"></span><a class="btn" href="/api/backtest.csv?id=${encodeURIComponent(res.id)}" download>Download CSV</a></div>
+    <div class="tablewrap"><table id="tt"><thead></thead><tbody></tbody></table></div>
+    ${Math.max(res.taken_total, res.trades_total) > 3000 ? `<div class="sub" style="margin-top:6px">Showing the latest 3,000; the CSV has all of them.</div>` : ""}</div>`;
+  h += `<div class="card" id="runsCard"><h3>Previous runs</h3><div class="tablewrap" style="max-height:260px"><table class="runs"><thead><tr>
+      <th class="text">Rule</th><th>Trades</th><th>Expectancy R</th><th>CAGR %</th><th>Max DD %</th><th class="text">Run</th>
+    </tr></thead><tbody id="runs"></tbody></table></div></div>
+    <div class="foot">Past results on today's list of stocks (survivorship bias) using Yahoo daily data. Not a forecast and not investment advice.</div>`;
+  $("out").innerHTML = h;
+  equityChart(res);
+  histChart(res.trades);
+  tradeTable(res, "taken");
+  for (const b of document.querySelectorAll(".seg button")) b.onclick = () => {
+    for (const x of document.querySelectorAll(".seg button")) x.classList.toggle("on", x === b);
+    tradeTable(res, b.dataset.set);
+  };
+  loadRuns();
+}
+
+// ---------- charts (inline SVG) ----------
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function niceTicks(lo, hi, n = 5) {
+  const span = hi - lo || 1, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => span / s <= n) || 10 * mag;
+  const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(v);
+  return out;
+}
+function equityChart(res) {
+  const eq = res.equity, bq = res.bench_equity || [];
+  const box = $("eqChart"), W = Math.max(320, box.clientWidth), H = 260, P = { l: 64, r: 12, t: 10, b: 24 };
+  const dates = eq.map((p) => p[0]);
+  const idx = new Map(dates.map((d, i) => [d, i]));
+  const bAligned = bq.filter((p) => idx.has(p[0]));
+  const all = eq.map((p) => p[1]).concat(bAligned.map((p) => p[1]));
+  let lo = Math.min(...all), hi = Math.max(...all);
+  const pad = (hi - lo) * 0.05; lo -= pad; hi += pad;
+  const x = (i) => P.l + (W - P.l - P.r) * (i / Math.max(1, dates.length - 1));
+  const y = (v) => P.t + (H - P.t - P.b) * (1 - (v - lo) / (hi - lo || 1));
+  let s = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="Equity curve of the strategy vs NIFTY 50">`;
+  for (const t of niceTicks(lo, hi)) s += `<line x1="${P.l}" x2="${W - P.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${P.l - 6}" y="${y(t) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${rupees(t)}</text>`;
+  let lastYear = "", lastX = -1e9;
+  dates.forEach((d, i) => {
+    const yr = d.slice(0, 4);
+    if (yr === lastYear) return;
+    lastYear = yr;
+    s += `<line x1="${x(i)}" x2="${x(i)}" y1="${P.t}" y2="${H - P.b}" stroke="var(--grid)"/>`;
+    if (x(i) - lastX >= 36) {          // narrow screens: label every other year rather than overlap
+      s += `<text x="${x(i)}" y="${H - 6}" font-size="11" fill="var(--muted)">${yr}</text>`;
+      lastX = x(i);
+    }
+  });
+  const path = (pts) => pts.map((p, k) => (k ? "L" : "M") + x(idx.get(p[0])).toFixed(1) + " " + y(p[1]).toFixed(1)).join("");
+  if (bAligned.length) s += `<path d="${path(bAligned)}" fill="none" stroke="var(--s2)" stroke-width="2" stroke-dasharray="6 3"/>`;
+  s += `<path d="${path(eq)}" fill="none" stroke="var(--s1)" stroke-width="2"/>`;
+  s += `<line id="eqX" y1="${P.t}" y2="${H - P.b}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>`;
+  s += `<rect x="${P.l}" y="${P.t}" width="${W - P.l - P.r}" height="${H - P.t - P.b}" fill="transparent" id="eqHit"/></svg><div class="tip" id="eqTip" hidden></div>`;
+  box.innerHTML = s;
+  // drawdown (both series, same identity colours)
+  const dd = (pts) => { let pk = -Infinity; return pts.map((p) => { pk = Math.max(pk, p[1]); return [p[0], (p[1] / pk - 1) * 100]; }); };
+  const de = dd(eq), db = dd(bAligned);
+  const dlo = Math.min(-1, ...de.map((p) => p[1]), ...db.map((p) => p[1]));
+  const dbox = $("ddChart"), DH = 120;
+  const yd = (v) => 6 + (DH - 30) * (v / dlo);
+  let t = `<svg viewBox="0 0 ${W} ${DH}" height="${DH}" role="img" aria-label="Drawdown of the strategy and NIFTY 50">`;
+  for (const v of niceTicks(dlo, 0, 3)) t += `<line x1="${P.l}" x2="${W - P.r}" y1="${yd(v)}" y2="${yd(v)}" stroke="var(--grid)"/><text x="${P.l - 6}" y="${yd(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${n0.format(v)}%</text>`;
+  const dpath = (pts) => pts.map((p, k) => (k ? "L" : "M") + x(idx.get(p[0])).toFixed(1) + " " + yd(p[1]).toFixed(1)).join("");
+  if (db.length) t += `<path d="${dpath(db)}" fill="none" stroke="var(--s2)" stroke-width="1.5" stroke-dasharray="6 3"/>`;
+  t += `<path d="${dpath(de)}" fill="none" stroke="var(--s1)" stroke-width="2"/></svg>`;
+  dbox.innerHTML = t;
+  // crosshair + tooltip
+  const bmap = new Map(bAligned.map((p) => [p[0], p[1]]));
+  const hit = $("eqHit"), tip = $("eqTip"), line = $("eqX");
+  const move = (ev) => {
+    const r = box.getBoundingClientRect(), px = (ev.clientX - r.left) * (W / r.width);
+    const i = Math.max(0, Math.min(dates.length - 1, Math.round((px - P.l) / (W - P.l - P.r) * (dates.length - 1))));
+    const d = dates[i], xv = x(i);
+    line.setAttribute("x1", xv); line.setAttribute("x2", xv); line.setAttribute("visibility", "visible");
+    const bv = bmap.get(d);
+    tip.innerHTML = `<b>${esc(d)}</b><br><span class="sw" style="background:var(--s1)"></span>Strategy ${rupees(eq[i][1])} (${pct(de[i][1], 1)} from peak)` +
+      (bv != null ? `<br><span class="sw" style="background:var(--s2)"></span>NIFTY 50 ${rupees(bv)}` : "");
+    tip.hidden = false;
+    const left = xv * r.width / W;
+    tip.style.left = Math.min(left + 12, r.width - tip.offsetWidth - 4) + "px"; tip.style.top = "8px";
+  };
+  hit.addEventListener("mousemove", move);
+  hit.addEventListener("mouseleave", () => { tip.hidden = true; line.setAttribute("visibility", "hidden"); });
+}
+function histChart(trades) {
+  const rs = trades.map((t) => t.net_r).filter((v) => v != null);
+  const usePct = rs.length < trades.length / 2;
+  const vals = usePct ? trades.map((t) => t.net_pct) : rs;
+  const box = $("hist");
+  if (!vals.length) { box.innerHTML = ""; return; }
+  const step = usePct ? 2 : 0.5, lo = Math.max(Math.floor(Math.min(...vals) / step) * step, usePct ? -30 : -4);
+  const hi = Math.min(Math.ceil(Math.max(...vals) / step) * step, usePct ? 40 : 8);
+  const bins = []; for (let b = lo; b < hi; b += step) bins.push({ a: b, b: b + step, n: 0 });
+  for (const v of vals) { const c = Math.max(lo, Math.min(hi - 1e-9, v)); const i = Math.floor((c - lo) / step); if (bins[i]) bins[i].n++; }
+  const W = Math.max(300, box.clientWidth), H = 200, P = { l: 40, r: 8, t: 8, b: 26 };
+  const mx = Math.max(...bins.map((b) => b.n)), bw = (W - P.l - P.r) / bins.length;
+  const y = (n) => P.t + (H - P.t - P.b) * (1 - n / (mx || 1));
+  let s = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="Distribution of trade results">`;
+  for (const t of niceTicks(0, mx, 3)) s += `<line x1="${P.l}" x2="${W - P.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${P.l - 6}" y="${y(t) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${n0.format(t)}</text>`;
+  bins.forEach((b, i) => {
+    const x0 = P.l + i * bw + 1, h = (H - P.b) - y(b.n), mid = (b.a + b.b) / 2;
+    const col = mid < 0 ? "var(--down)" : "var(--up)";
+    const label = `${usePct ? pct(b.a, 0) + " to " + pct(b.b, 0) : n1.format(b.a) + " R to " + n1.format(b.b) + " R"}: ${n0.format(b.n)} trades`;
+    s += `<rect x="${x0}" y="${y(b.n)}" width="${Math.max(1, bw - 2)}" height="${Math.max(0, h)}" rx="2" fill="${col}"><title>${label}</title></rect>`;
+    s += `<rect x="${x0 - 1}" y="${P.t}" width="${bw}" height="${H - P.t - P.b}" fill="transparent"><title>${label}</title></rect>`;
+  });
+  const zx = P.l + (0 - lo) / (hi - lo) * (W - P.l - P.r);
+  s += `<line x1="${zx}" x2="${zx}" y1="${P.t}" y2="${H - P.b}" stroke="var(--muted)" stroke-dasharray="3 3"/>`;
+  for (const v of niceTicks(lo, hi, 6)) { const xv = P.l + (v - lo) / (hi - lo) * (W - P.l - P.r); s += `<text x="${xv}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--muted)">${usePct ? n0.format(v) + "%" : n1.format(v) + "R"}</text>`; }
+  box.innerHTML = s + "</svg>";
+}
+
+// ---------- trades table ----------
+const TCOLS = [
+  ["sym", "Symbol", "text"], ["entry_date", "Entry", "text"], ["entry", "Price", "price"], ["stop", "Stop", "price"],
+  ["target", "Target", "price"], ["exit_date", "Exit", "text"], ["exit", "Exit price", "price"], ["reason", "Why", "text"],
+  ["bars", "Days", "int"], ["net_pct", "Net %", "pct"], ["net_r", "R", "r"], ["mfe_pct", "MFE %", "pct"], ["mae_pct", "MAE %", "pct"],
+  ["shares", "Shares", "int"], ["pnl", "P&L", "money"],
+];
+let tsort = { k: "entry_date", desc: true };
+function tradeTable(res, set) {
+  const rows = (set === "taken" ? res.taken : res.trades).slice();
+  const cols = TCOLS.filter(([k]) => set === "taken" || !["shares", "pnl"].includes(k));
+  const t = $("tt");
+  t.tHead.innerHTML = "<tr>" + cols.map(([k, l, f]) => `<th class="${f === "text" ? "text" : ""}${tsort.k === k ? " sorted" : ""}" data-k="${k}">${l}${tsort.k === k ? (tsort.desc ? " ▼" : " ▲") : ""}</th>`).join("") + "</tr>";
+  for (const th of t.tHead.querySelectorAll("th")) th.onclick = () => {
+    tsort = { k: th.dataset.k, desc: tsort.k === th.dataset.k ? !tsort.desc : true }; tradeTable(res, set);
+  };
+  const k = tsort.k;
+  rows.sort((a, b) => { const x = a[k], y = b[k]; if (x == null) return 1; if (y == null) return -1; return (x < y ? -1 : x > y ? 1 : 0) * (tsort.desc ? -1 : 1); });
+  const fmt = (v, f) => v == null ? "—" : f === "price" ? n2.format(v) : f === "pct" ? pct(v) : f === "r" ? n2.format(v) : f === "int" ? n0.format(v) : f === "money" ? rupees(v) : esc(v);
+  t.tBodies[0].innerHTML = rows.slice(0, 3000).map((r) => "<tr>" + cols.map(([c, , f]) =>
+    `<td class="${f === "text" ? "text" : ""} ${["net_pct", "net_r", "pnl"].includes(c) ? tone(r[c]) : ""}">${c === "sym" ? `<b>${esc(r.sym)}</b> <span style="color:var(--muted);font-size:10px">${esc(r.exchange)}</span>` : c === "reason" ? esc({ stop: "stop", target: "target", time: "time", rule: "rule", trail: "trail", end: "open" }[r.reason] || r.reason) : fmt(r[c], f)}</td>`).join("") + "</tr>").join("");
+}
+
+// ---------- previous runs ----------
+async function loadRuns() {
+  try {
+    const j = await (await fetch("/api/backtests")).json();
+    const body = $("runs"); if (!body) return;
+    if ($("runsCard")) $("runsCard").hidden = !j.runs.length;
+    body.innerHTML = j.runs.map((r) => `<tr data-id="${esc(r.id)}"><td class="rule" title="${esc(r.entry)}">${esc(r.entry)}</td><td>${num(r.trades, 0)}</td>
+      <td class="${tone(r.expectancy_r)}">${num(r.expectancy_r, 3)}</td><td class="${tone(r.cagr_pct)}">${num(r.cagr_pct)}</td><td>${num(r.max_drawdown_pct, 1)}</td>
+      <td class="text" style="color:var(--muted)">${esc(r.id.slice(0, 8))} ${esc(r.id.slice(9, 13).replace(/(..)(..)/, "$1:$2"))}</td></tr>`).join("");
+    for (const tr of body.children) tr.onclick = () => openRun(tr.dataset.id);
+  } catch {}
+}
+
+// ---------- init ----------
+(async function init() {
+  try {
+    const meta = await (await fetch("/api/meta")).json();
+    for (const p of meta.presets) { const o = document.createElement("option"); o.value = p.filter; o.textContent = p.name; $("preset").append(o); }
+    const ranks = ["turnover", "rvol", "rsi14", "change_pct", "db_score", "adx14", "chg_3m", "from_52w_high"];
+    for (const k of ranks) if (meta.fields[k]) { const o = document.createElement("option"); o.value = k; o.textContent = meta.fields[k].label; $("rank").append(o); }
+  } catch {}
+  $("preset").onchange = (e) => { if (e.target.value) $("entry").value = e.target.value; e.target.value = ""; };
+  for (const id of ["entry_mode", "stop_k", "target_k", "trail_k", "sizing"]) $(id).addEventListener("change", syncVisibility);
+  writeForm(store.get("bt.form", {}));
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get("entry")) $("entry").value = h.get("entry");
+  syncVisibility();
+  if (h.get("run")) openRun(h.get("run")); else loadRuns();
+})();
+window.addEventListener("resize", () => { if (lastResult) { equityChart(lastResult); histChart(lastResult.trades); } });
+</script>
+</body>
+</html>
