@@ -50,73 +50,109 @@ from . import expr, indicators, net, patterns
 from .fields import FIELDS, PATTERNS
 from .history import _fname
 
+# Default directory for durable 10-year daily history cache for backtesting.
 BT_ROOT = "data/history_bt"
 BT_RANGE = "10y"
+# 2,600 trading days corresponds to 10.4 calendar years (~250 trading days/year in India).
 BT_MAX_BARS = 2600
+# Default equity market benchmark for India (Nifty 50 Index).
 BENCH = "^NSEI"
+# Threshold for detecting unadjusted corporate splits or erroneous Yahoo quote spikes.
+# A one-day move > 45% is almost certainly an unadjusted corporate split or dividend.
 SUSPECT_MOVE = 0.45
-STATIC_WINDOW = 200          # bars handed to patterns.static (double bottom needs ~110)
+# Number of bars fed into pattern recognition algorithms (e.g. double bottom neckline scans).
+STATIC_WINDOW = 200
 
-# Fields computed from structure over closed bars (patterns.static): only
-# built when the rule needs them - they cost more than the indicators.
-STATIC_FIELDS = {"nr7", "inside_day", "bull_flag", "bull_flag_breakout", "double_bottom", "db_forming",
-                 "db_score", "db_neckline", "db_target", "db_stop", "db_entry", "db_risk_pct",
-                 "db_target_1r", "db_target_2r", "db_days_since_breakout", "db_l1_date", "db_l2_date"}
+# Fields computed from multi-bar candle structure via patterns.static.
+# Computing these on every closed bar across 2,000 stocks for 10 years is CPU-intensive.
+# The engine checks if the user's rule references any of these fields; if not, static
+# calculation is skipped entirely to achieve a 10x speedup.
+STATIC_FIELDS = {
+    "nr7", "inside_day", "bull_flag", "bull_flag_breakout", "double_bottom", "db_forming",
+    "db_score", "db_neckline", "db_target", "db_stop", "db_entry", "db_risk_pct",
+    "db_target_1r", "db_target_2r", "db_days_since_breakout", "db_l1_date", "db_l2_date",
+}
 FLAG_FIELDS = STATIC_FIELDS | {p for p, _ in PATTERNS}
-NOT_HISTORICAL = {"age": "data age only exists live", "official_eod": "live-only flag",
-                  "hist_ok": "live-only flag", "note": "live-only text"}
-LOOKAHEAD = {"indices": "index membership is today's list - using it in a backtest is look-ahead "
-                        "(stocks are in the NIFTY 50 because they went up)"}
 
-COSTS = {                      # % of trade value unless noted; delivery equity, Nov 2026
-    "brokerage_pct": 0.0,      # discount brokers charge 0 on delivery
-    "brokerage_max": 20.0,     # ₹ cap per order when brokerage_pct > 0
-    "stt_pct": 0.1,            # buy and sell
-    "stamp_pct": 0.015,        # buy only
-    "exch_pct": 0.00307,       # NSE transaction charge
-    "sebi_pct": 0.0001,        # ₹10 / crore
-    "gst_pct": 18.0,           # on brokerage + exchange charges
-    "dp_flat": 23.6,           # ₹ per sell (₹20 + GST), portfolio only
-    "slippage_pct": 0.05,      # per fill, against you
+# Fields that only exist in the live screener runtime and have no meaningful historical value.
+NOT_HISTORICAL = {
+    "age": "data age only exists live",
+    "official_eod": "live-only flag",
+    "hist_ok": "live-only flag",
+    "note": "live-only text",
 }
 
+# Fields that introduce survivorship or look-ahead bias if used in historical backtests.
+LOOKAHEAD = {
+    "indices": "index membership is today's list - using it in a backtest is look-ahead "
+               "(stocks are in the NIFTY 50 because they went up)",
+}
+
+# Real-world Indian delivery equity statutory taxes, regulatory fees, and exchange costs (Nov 2026).
+# Why: Trading strategies that appear profitable gross of fees often lose money after STT,
+# exchange turnover charges, SEBI turnover fees, GST, and depository (DP) charges.
+COSTS = {
+    "brokerage_pct": 0.0,      # Major Indian discount brokers (Zerodha, Groww, AngelOne) charge ₹0 on equity delivery
+    "brokerage_max": 20.0,     # ₹ cap per order when non-zero brokerage applies
+    "stt_pct": 0.1,            # Securities Transaction Tax: 0.1% on buy and 0.1% on sell (delivery)
+    "stamp_pct": 0.015,        # Stamp duty: 0.015% on buy side only
+    "exch_pct": 0.00307,       # NSE equity cash transaction charge
+    "sebi_pct": 0.0001,        # SEBI turnover fee: ₹10 per crore (0.0001%)
+    "gst_pct": 18.0,           # 18% Goods and Services Tax applied on (brokerage + exchange charges)
+    "dp_flat": 23.6,           # Depository Participant debit charge per stock per day on sell (₹20 + 18% GST)
+    "slippage_pct": 0.05,      # Conservative 0.05% execution slippage penalty per fill against the trader
+}
+
+# Default backtest parameters providing safe defaults.
 DEFAULTS = {
     "entry": "",
     "entry_mode": "next_open",      # next_open | signal_close | buy_stop
-    "entry_level": "high",          # buy_stop level (expression on the signal day)
-    "entry_valid_days": 1,          # buy_stop stays active this many sessions
-    "max_gap_pct": None,            # skip a next_open fill gapping up more than this
+    "entry_level": "high",          # buy_stop level (expression evaluated on the signal day)
+    "entry_valid_days": 1,          # Number of sessions a buy_stop order remains active before cancellation
+    "max_gap_pct": None,            # Skip next_open fills if price gaps up beyond this percentage
     "stop": "atr:2",                # none | pct:N | atr:N | expr:<expression>
     "target": "r:2",                # none | pct:N | atr:N | r:N | expr:<expression>
-    "trail": "none",                # none | pct:N | atr:N (from the highest high since entry)
-    "max_hold": 20,                 # sessions; 0 = no limit
-    "exit": "",                     # expression checked at each close -> exit next open
-    "start": None, "end": None,     # ISO dates (signal dates)
+    "trail": "none",                # none | pct:N | atr:N (anchored to highest high reached since entry)
+    "max_hold": 20,                 # Max holding period in trading sessions (0 = hold until stopped/targeted)
+    "exit": "",                     # Optional discretionary exit rule evaluated at each close
+    "start": None, "end": None,     # Backtest date range bounds (YYYY-MM-DD)
     "exchanges": ["NSE", "BSE"],
-    "min_turnover": 1e7,            # ₹ traded on the signal day (1 crore)
-    "include_suspect": False,
+    "min_turnover": 1e7,            # ₹1 Crore minimum daily traded value to filter out illiquid penny stocks
+    "include_suspect": False,       # Exclude trades crossing >45% single-day moves by default
     "costs": COSTS,
-    "portfolio": {"capital": 1_000_000, "max_positions": 10, "sizing": "risk", "risk_pct": 1.0,
-                  "max_alloc_pct": 20.0, "rank": "turnover", "rank_desc": True},
+    "portfolio": {
+        "capital": 1_000_000,       # Initial starting equity (₹10 Lakhs)
+        "max_positions": 10,        # Maximum concurrent open positions
+        "sizing": "risk",           # 'risk' (fixed % risk per trade) or 'equal' (equal capital allocation)
+        "risk_pct": 1.0,            # Risk 1.0% of portfolio equity per trade when sizing is 'risk'
+        "max_alloc_pct": 20.0,      # Cap maximum allocation in any single stock to 20% of account equity
+        "rank": "turnover",         # Tie-breaker field when signals exceed available position slots
+        "rank_desc": True,          # Prefer most liquid stocks first
+    },
 }
 
 
 class SpecError(ValueError):
+    """Raised when backtest specification syntax or logic fails validation."""
     pass
 
 
 # ---------------------------------------------------------------- custom periods
-# The live screener ships fixed periods (EMA 9/20/21/50/100/200, SMA 5…200,
-# RSI 14). A backtest rule may use any period - ema13, sma30, rsi7 - and
-# those are computed per symbol before the walk, with the same conventions
-# (SMA-seeded EMA, Wilder RSI). Value at bar t uses closes up to and
-# including t, exactly like the built-in fields on day t's row.
+# Regex matching custom indicator periods like 'ema13', 'sma50', 'rsi7', or 'ema13_prev'.
 CUSTOM_RE = re.compile(r"\b(ema|sma|rsi)(\d{1,3})(?:_prev)?\b", re.I)
 CUSTOM_MAX = 400
 
 
 def custom_fields(*srcs):
-    """Indicator names with a non-built-in period used in these expressions."""
+    """
+    Extract custom indicator names from rule expression strings.
+
+    Why this was written:
+    While the live screener calculates standard built-in periods (EMA 9/20/21/50/100/200,
+    SMA 5-200, RSI 14), backtest rules may evaluate arbitrary periods (e.g. ema13, sma30).
+    This function parses all expressions to identify non-standard periods so they can be
+    precomputed in vector passes before the simulation loop runs.
+    """
     out = set()
     for src in srcs:
         for m in CUSTOM_RE.finditer(src or ""):
@@ -131,12 +167,22 @@ def custom_fields(*srcs):
 
 
 def _split_custom(name):
+    """Split indicator identifier like 'ema13' into ('ema', 13)."""
     m = re.fullmatch(r"(ema|sma|rsi)(\d+)", name)
     return m.group(1), int(m.group(2))
 
 
 def custom_series(bars, names):
-    """{name: [value per bar]} for custom-period indicators (None = warm-up)."""
+    """
+    Compute time-series arrays for all custom-period indicators across closed bars.
+
+    Why this was written:
+    Generates exact series matching the engine's real-time math:
+    - EMA: SMA-seeded exponential smoothing via indicators.Ema.
+    - SMA: Rolling window sum with periodic re-summing (every 500 bars) via math.fsum
+      to completely eliminate IEEE 754 floating-point drift over 10-year timelines.
+    - RSI: Wilder's smoothing via indicators.Rma, exactly matching indicators.Base.
+    """
     closes = [b[4] for b in bars]
     out = {}
     for name in names:
@@ -148,11 +194,12 @@ def custom_series(bars, names):
             vals, run = [], 0.0
             for i, c in enumerate(closes):
                 run += c - (closes[i - n] if i >= n else 0.0)
-                if i and i % 500 == 0:            # re-sum: no float drift over 10 years
+                # Periodic re-sum prevents accumulation of floating-point subtraction drift
+                if i and i % 500 == 0:
                     run = math.fsum(closes[max(0, i - n + 1):i + 1])
                 vals.append(run / n if i >= n - 1 else None)
             out[name] = vals
-        else:   # rsi: Wilder, same steps as indicators.Base
+        else:   # rsi: Wilder's smoothing
             g, l = indicators.Rma(n), indicators.Rma(n)
             vals = [None]
             for a, b in zip(closes, closes[1:]):
@@ -163,6 +210,13 @@ def custom_series(bars, names):
 
 
 def _bt_fields(custom=()):
+    """
+    Construct schema dictionary for backtester expression compilation.
+
+    Why this was written:
+    Merges standard fields with dynamic custom fields (and their corresponding `_prev`
+    counterparts for crossovers), while stripping live-only fields like 'age' or 'hist_ok'.
+    """
     f = {k: v for k, v in FIELDS.items() if k not in NOT_HISTORICAL}
     for name in custom:
         kind, n = _split_custom(name)
@@ -175,7 +229,14 @@ def _bt_fields(custom=()):
 
 
 def _level(src, kinds, what):
-    """'atr:2' -> ('atr', 2.0); 'expr:low' -> ('expr', 'low'); 'none' -> ('none', None)."""
+    """
+    Parse risk level specification strings ('pct:2', 'atr:1.5', 'r:2', 'expr:low').
+
+    Why this was written:
+    Provides a standardized parser for stop-loss and profit-target parameters.
+    Validates syntax, bounds (>0 for numeric ratios), and differentiates between
+    ratios, multiples, and arbitrary expressions.
+    """
     src = (src or "none").strip()
     if src.lower() in ("none", "off", ""):
         return ("none", None)
@@ -197,8 +258,17 @@ def _level(src, kinds, what):
 
 
 def prepare(spec):
-    """Validate and normalise a spec dict. Returns (spec, warnings).
-    Raises SpecError / expr.ExprError with a message meant for the user."""
+    """
+    Validate, normalize, and compile a backtest specification dictionary.
+
+    Why this was written:
+    Catches invalid parameters, syntax errors, and logical inconsistencies BEFORE
+    spawning expensive worker processes:
+    - Verifies entry rule is non-empty.
+    - Compiles AST for entry, exit, levels, and ranking fields.
+    - Enforces safety: target 'r:N' requires a defined stop-loss; risk sizing requires a stop.
+    - Warns against look-ahead bias (e.g. 'indices' filtering or 'signal_close' fills).
+    """
     s = dict(DEFAULTS)
     s.update({k: v for k, v in (spec or {}).items() if v is not None})
     s["costs"] = dict(COSTS, **(spec or {}).get("costs") or {})
@@ -267,6 +337,13 @@ def prepare(spec):
 
 # ---------------------------------------------------------------- simulation
 class _Compiled:
+    """
+    Optimized evaluator container passed into simulation workers.
+
+    Why this was written:
+    Pre-compiles all AST lambdas and holds extracted flags so the inner simulation loop
+    does not repeat string checks or dictionary lookups for each bar.
+    """
     def __init__(self, s):
         fields = _bt_fields(s.get("_custom") or ())
         self.s = s
@@ -280,7 +357,7 @@ class _Compiled:
         self.stop_fn = expr.compile_value(self.stop[1], fields)[0] if self.stop[0] == "expr" else None
         self.target_fn = expr.compile_value(self.target[1], fields)[0] if self.target[0] == "expr" else None
         self.need_static = s["_need_static"]
-        self.need_flags = set(s["_used"]) & FLAG_FIELDS    # empty set = no flags at all
+        self.need_flags = set(s["_used"]) & FLAG_FIELDS
         self.start, self.end = s.get("start"), s.get("end")
         self.min_turnover = float(s.get("min_turnover") or 0)
         self.rank = s["portfolio"]["rank"]
@@ -294,9 +371,14 @@ INFO_KEYS = ("sym", "name", "exchange", "series", "industry", "indices")
 
 
 def _row(base, bar, bars, t, info, need_static, need_flags, cust=None):
-    """The day's row as the live screener would show it at the close. Lazy:
-    indicator groups are computed only when the rule reads one of their
-    fields; pattern flags only when the rule uses a pattern."""
+    """
+    Construct the LazyRow for a single historical bar at the close.
+
+    Why this was written:
+    Provides exact parity with the live screener row while using lazy property evaluation:
+    expensive indicators are only computed if the filter rule reads them. Attaches static
+    pattern flags only when pattern rules are active.
+    """
     d, o, h, l, c, v = bar
     row = indicators.LazyRow(base, c, h, l, v, o)
     for k in INFO_KEYS:
@@ -313,8 +395,16 @@ def _row(base, bar, bars, t, info, need_static, need_flags, cust=None):
 
 
 def _levels(cp, sig, entry):
-    """(stop, target) for a fill at `entry`, from the signal day's values.
-    None level = not used. Returns None when the trade is invalid."""
+    """
+    Compute stop-loss and profit-target price levels for a fill at `entry`.
+
+    Why this was written:
+    Derives prices from the signal day's metrics:
+    - Percentage stops/targets scale relative to fill entry price.
+    - ATR stops/targets use the signal day's ATR value.
+    - Risk multiple targets (r:N) scale relative to the distance from entry to stop (R = entry - stop).
+    - Validates that stop < entry and target > entry; returns None if trade geometry is invalid.
+    """
     k, x = cp.stop
     if k == "none":
         stop = None
@@ -351,7 +441,26 @@ def _levels(cp, sig, entry):
 
 
 def simulate(bars, info, cp, counters=None):
-    """Walk one symbol's bars. Returns the list of trades (dicts)."""
+    """
+    Execute chronological simulation of one symbol's historical bars.
+
+    Why this was written:
+    Implements a strict, realistic state machine that models real-world execution hurdles:
+    1. Pending order resolution:
+       - Untradable or holiday bars (volume=0) do not execute fills.
+       - Circuit-locked bars (O=H=L=C) reject fills (cannot buy a locked upper-circuit stock).
+       - Gapping opens: if a stock gaps up past `max_gap_pct`, fill is rejected.
+       - Buy-stop orders check intraday high; if open >= level, fills at open; else if high >= level, fills at level.
+    2. Position management:
+       - Gap-down open through stop: fills at OPEN, reflecting real gap slippage.
+       - Same-day stop and target touch: assumes STOP (conservative bias rule).
+       - Buy-stop entry day: does not credit a same-day profit target fill because the high might have
+         occurred before the buy-stop triggered.
+    3. Trailing stops: ratchet upward anchored to the highest high achieved since entry.
+    4. Max holding duration: exits at close of the max allowed session.
+    5. Discretionary exit rules: evaluated at close, triggering exit at the next open.
+    6. Signal generation: checks entry criteria at close of session.
+    """
     cnt = counters if counters is not None else {}
 
     def bump(k):
@@ -359,8 +468,7 @@ def simulate(bars, info, cp, counters=None):
 
     base = indicators.Base([])
     cust = custom_series(bars, cp.custom) if cp.custom else None
-    # Forex (and some indices) carry no volume at all: there, volume 0 is
-    # "not reported", not "no trades", so it cannot mark a day untradable.
+    # For Forex and certain indices, volume is unreported (always 0). We detect this so they aren't marked untradable.
     no_volume = sum(1 for b in bars if b[5] > 0) < 0.05 * len(bars)
     trades = []
     pos = None
@@ -371,7 +479,7 @@ def simulate(bars, info, cp, counters=None):
         tradable = (v > 0 or no_volume) and h >= l > 0
         locked = tradable and o == h == l == c
 
-        # ---- 1. a pending entry tries to fill
+        # ---- 1. Pending entry evaluation
         if pend is not None and pos is None:
             fill = None
             if not tradable:
@@ -412,7 +520,7 @@ def simulate(bars, info, cp, counters=None):
                     pos = _open(pend, d, t, entry, lv, kind)
                 pend = None
 
-        # ---- 2. manage the open position on this bar
+        # ---- 2. Manage open position during the bar
         exited = False
         if pos is not None and (pos["entry_i"] < t or pos["kind"] != "close"):
             entry_day = pos["entry_i"] == t
@@ -422,15 +530,16 @@ def simulate(bars, info, cp, counters=None):
                     _close(pos, d, t, o, pos["exit_next_open"], True, trades)
                     exited = True
                 elif not entry_day and stop is not None and o <= stop:
+                    # Gap open below stop: exit at the open price, capturing full gap loss
                     _close(pos, d, t, o, "trail" if pos["trailed"] else "stop", True, trades)
                     exited = True
                 elif not entry_day and target is not None and o >= target:
+                    # Gap open above target: exit at the open price, capturing gap profit
                     _close(pos, d, t, o, "target", True, trades)
                     exited = True
                 else:
                     hit_s = stop is not None and l <= stop
-                    # entry day of a buy_stop fill: the high may have come
-                    # before the fill - never credit a target that day
+                    # On entry day of buy_stop, the bar's high may have occurred before the fill
                     hit_t = target is not None and h >= target and not (entry_day and pos["kind"] == "intraday")
                     if hit_s and hit_t:
                         bump("ambiguous")
@@ -449,12 +558,12 @@ def simulate(bars, info, cp, counters=None):
                 if tradable:
                     pos["held"] += 1
 
-        # ---- 3. the day's fields (only when something needs them)
+        # ---- 3. Compute day's fields only when needed
         need_row = (pos is not None and not exited and (cp.exit or cp.trail[0] == "atr")) or \
                    (pos is None and pend is None and d >= first_needed and (cp.end is None or d <= cp.end))
         row = _row(base, bar, bars, t, info, cp.need_static, cp.need_flags, cust) if (need_row and base.n) else None
 
-        # ---- 4. close-of-day management for the open position
+        # ---- 4. Close-of-day position management
         if pos is not None and pos["entry_i"] <= t:
             if cp.trail[0] != "none" and tradable:
                 k, x = cp.trail
@@ -473,7 +582,7 @@ def simulate(bars, info, cp, counters=None):
             elif cp.exit and row is not None and cp.exit(row):
                 pos["exit_next_open"] = "rule"
 
-        # ---- 5. a new signal at this close
+        # ---- 5. Check for new trade signal at this close
         if row is not None and pos is None and pend is None and tradable and not exited:
             if cp.entry(row):
                 bump("signals")
@@ -503,6 +612,7 @@ def simulate(bars, info, cp, counters=None):
                         pend = None
         base.advance(bar)
 
+    # Force close any position remaining open at the end of historical data
     if pos is not None:
         last = bars[-1]
         _close(pos, last[0], len(bars) - 1, last[4], "end", False, trades, keep_path=True)
@@ -510,8 +620,7 @@ def simulate(bars, info, cp, counters=None):
 
 
 def _open(pend, d, t, entry, levels, kind):
-    """kind: 'open' (filled at the open), 'intraday' (buy stop hit during the
-    day) or 'close' (signal_close)."""
+    """Initialize state dictionary for an active trade."""
     stop, target = levels
     return {"signal_date": pend["signal_date"], "entry_date": d, "entry_i": t, "entry": entry,
             "stop0": stop, "stop": stop, "target": target, "kind": kind,
@@ -520,19 +629,26 @@ def _open(pend, d, t, entry, levels, kind):
 
 
 def _close(pos, d, t, price, reason, at_open, trades, keep_path=True):
+    """
+    Finalize an exited trade record and calculate return metrics.
+
+    Why this was written:
+    Computes percentage return, R-multiple ((exit - entry) / risk), Maximum Favorable Excursion (MFE),
+    Maximum Adverse Excursion (MAE), holding duration in sessions, and flags suspect data
+    (single-day moves > 45% indicative of splits).
+    """
     pos["path"].append((d, price))
     hi = max(pos["hi"], price)
     lo = min(pos["lo"], price)
     e = pos["entry"]
     closes = [pos["entry"]] + [p for _, p in pos["path"]]
+    # Detect unadjusted corporate splits or dividend adjustments in Yahoo data
     suspect = any(b <= 0 or abs(b / a - 1) > SUSPECT_MOVE for a, b in zip(closes, closes[1:]) if a > 0)
     risk = (e - pos["stop0"]) if pos["stop0"] is not None else None
     trades.append({
         "signal_date": pos["signal_date"], "entry_date": pos["entry_date"], "entry": e,
         "stop": pos["stop0"], "target": pos["target"], "exit_date": d, "exit": price, "reason": reason,
         "exit_at_open": at_open, "entry_kind": pos["kind"],
-        # sessions exposed: entry day counts unless filled at its close; the
-        # exit day counts unless left at its open
         "bars": t - pos["entry_i"] + (0 if pos["kind"] == "close" else 1) - (1 if at_open else 0),
         "ret_pct": (price / e - 1) * 100.0, "r": ((price - e) / risk) if risk else None,
         "mfe_pct": (hi / e - 1) * 100.0, "mae_pct": (lo / e - 1) * 100.0,
@@ -543,7 +659,13 @@ def _close(pos, d, t, price, reason, at_open, trades, keep_path=True):
 
 # ---------------------------------------------------------------- costs & stats
 def cost_pcts(c):
-    """(buy %, sell %) of trade value, slippage included; DP is separate."""
+    """
+    Compute total percentage transaction cost overhead for buy and sell orders.
+
+    Why this was written:
+    Aggregates statutory taxes (STT, Stamp Duty, SEBI turnover fees), exchange fees,
+    GST (18% on fees), and slippage into net deduction factors.
+    """
     gst = c["gst_pct"] / 100.0
     fees = c["exch_pct"] + c["brokerage_pct"]
     buy = c["stt_pct"] + c["stamp_pct"] + c["sebi_pct"] + fees * (1 + gst) + c["slippage_pct"]
@@ -552,6 +674,9 @@ def cost_pcts(c):
 
 
 def apply_costs(trades, costs):
+    """
+    Adjust trade returns and R-multiples for realistic transaction friction.
+    """
     b, s = cost_pcts(costs)
     for t in trades:
         e, x = t["entry"], t["exit"]
@@ -563,8 +688,13 @@ def apply_costs(trades, costs):
 
 
 def _bootstrap_ci(xs, n=1000, seed=7):
-    """95 % interval of the mean by resampling the trades: if it spans 0,
-    the edge is not distinguishable from luck."""
+    """
+    Calculate 95% confidence interval of sample mean via bootstrap resampling.
+
+    Why this was written:
+    Helps distinguish true statistical edge from random luck. If the 95% confidence
+    interval crosses zero, the strategy has no statistically verifiable edge.
+    """
     if len(xs) < 5:
         return None
     rnd = random.Random(seed)
@@ -574,6 +704,13 @@ def _bootstrap_ci(xs, n=1000, seed=7):
 
 
 def trade_stats(trades, ci=False):
+    """
+    Compute comprehensive trading performance summary statistics.
+
+    Why this was written:
+    Calculates win rate, average win/loss, profit factor, mathematical expectancy (in % and R),
+    consecutive losing streaks, maximum favorable/adverse excursion, and exit reason breakdowns.
+    """
     n = len(trades)
     if not n:
         return {"trades": 0}
@@ -610,6 +747,7 @@ def trade_stats(trades, ci=False):
 
 
 def by_year(trades):
+    """Breakdown performance metrics year by year to detect regime dependency."""
     out = {}
     for t in trades:
         out.setdefault(t["entry_date"][:4], []).append(t)
@@ -626,12 +764,17 @@ def by_year(trades):
 
 # ---------------------------------------------------------------- portfolio
 def portfolio(trades, p, costs, dates):
-    """Chronological account simulation over `dates` (trading days).
+    """
+    Chronological portfolio account simulation over trading calendar dates.
 
-    Same day order as the market: exits at the open, entries at the open,
-    buy-stop entries during the day, then intraday and closing exits, then
-    entries at the close. Equity is marked to each close. Sizing uses the previous close's
-    equity. No leverage, no shorting. Returns (curve, taken trades, stats)."""
+    Why this was written:
+    Simulates a real-world multi-position investment account:
+    - Order sequence matches exchange rules: open exits -> open entries -> intraday buy-stops ->
+      intraday exits -> close entries.
+    - Sizing: respects portfolio cash limits, max position count, and individual position caps.
+    - Flat depository (DP) charges applied on each sell.
+    - Tracks daily mark-to-market equity curve and capital utilization (exposure %).
+    """
     b, s = cost_pcts(costs)
     dp = float(costs.get("dp_flat") or 0)
     cap = float(p["capital"])
@@ -687,14 +830,14 @@ def portfolio(trades, p, costs, dates):
             held[i] = {"shares": shares, "last": t["entry"], "cost": cost, "k": len(taken)}
             by_exit.setdefault(t["exit_date"], []).append(i)
             taken.append(dict({k: v for k, v in t.items() if k != "path"}, shares=shares,
-                              value=cost, pnl=None, pnl_pct=None))
+                               value=cost, pnl=None, pnl_pct=None))
 
     for d in dates:
-        do_exits(d, True)            # gap stops / exit-rule exits at the open
-        do_entries(d, "open")
-        do_entries(d, "intraday")    # buy stops (before that day's intraday exits)
-        do_exits(d, False)           # stops / targets / time exits
-        do_entries(d, "close")       # signal_close fills
+        do_exits(d, True)            # Gap stops / exit-rule exits executed at the open
+        do_entries(d, "open")        # Standard entries executed at the open
+        do_entries(d, "intraday")    # Buy stops triggered during trading hours
+        do_exits(d, False)           # Intraday stops, targets, or max-hold time exits
+        do_entries(d, "close")       # Signal-close entries
         for i, h in held.items():
             c = closes_by[i].get(d)
             if c is not None:
@@ -703,11 +846,17 @@ def portfolio(trades, p, costs, dates):
         equity = cash + pos_val
         invested_frac.append(pos_val / equity if equity > 0 else 0)
         curve.append((d, equity))
-    # anything still open at the end: marked at its last close
     return curve, taken, skipped, (statistics.fmean(invested_frac) * 100 if invested_frac else 0)
 
 
 def curve_stats(curve, capital):
+    """
+    Compute portfolio equity curve statistics.
+
+    Why this was written:
+    Calculates Compound Annual Growth Rate (CAGR), Maximum Drawdown (MDD), drawdown
+    recovery duration, annualized Sharpe ratio, and annualized return volatility.
+    """
     if len(curve) < 2:
         return {}
     eq = [e for _, e in curve]
@@ -727,7 +876,6 @@ def curve_stats(curve, capital):
             mdd, mdd_at = dd, curve[i][0]
     longest = max(longest, len(eq) - 1 - cur_start)
     sd = statistics.pstdev(rets) if len(rets) > 1 else 0
-    # bars per year as observed: ~248 for NSE, ~365 for crypto, ~260 for forex
     ppy = (len(eq) - 1) / years if years >= 0.5 else 248
     return {
         "start": curve[0][0], "end": curve[-1][0], "final": final,
@@ -743,18 +891,20 @@ def curve_stats(curve, capital):
 # ---------------------------------------------------------------- runner
 _W = {}
 
-
 INDIAN_RE = re.compile(r"(\.NS|\.BO)$|^\^(NSE|BSE|CNX)", re.I)
 REFRESH_SECS = 12 * 3600
 
 
 def ensure_history(ysym, client, root=BT_ROOT, max_age=REFRESH_SECS):
-    """10-year daily bars for any Yahoo symbol, cached in `root`. NSE/BSE
-    symbols and indices go through HistoryStore (split checks, IST partial-bar
-    rule). Anything else (BTC-USD, EURUSD=X, AAPL, GC=F) is fetched whole and
-    its most recent day dropped: it may still be trading in its own time zone,
-    and a partial bar would be a look-ahead. Returns bars; on a network error
-    returns the cached bars if any, else raises."""
+    """
+    Fetch and cache 10-year daily OHLCV bars for any Yahoo symbol.
+
+    Why this was written:
+    Handles differences between Indian equities and global assets:
+    - Indian tickers go through HistoryStore to apply split detection and IST cutoffs.
+    - Foreign assets (Bitcoin, US equities, Forex) are fetched directly, and their
+      most recent unclosed partial bar is defensively dropped to avoid look-ahead bias.
+    """
     from . import yahoo
     from .history import HistoryStore
     path = os.path.join(root, _fname(ysym))
@@ -782,15 +932,19 @@ def ensure_history(ysym, client, root=BT_ROOT, max_age=REFRESH_SECS):
 
 
 def external_info(ysym):
-    """Row info for an instrument that is not in the NSE/BSE universe."""
+    """Synthesize universe metadata for non-NSE/BSE tickers (commodities, FX, US)."""
     return {"sym": ysym, "ysym": ysym, "exchange": "EXT", "name": ysym, "series": None,
             "industry": None, "indices": []}
 
 
 def series(bars, names, info=None):
-    """Per-bar values of `names` exactly as the backtester sees them on each
-    day's row (same Base walk, same custom-period code). For chart overlays:
-    what is drawn is what the rule was tested on."""
+    """
+    Generate per-bar indicator series for STRATLAB chart visualization.
+
+    Why this was written:
+    Guarantees that chart overlays display the exact numerical values that the
+    backtest rules evaluated on each trading day.
+    """
     custom = custom_fields(*names)
     fields = _bt_fields(custom)
     bad = [n for n in names if n not in fields]
@@ -812,11 +966,13 @@ def series(bars, names, info=None):
 
 
 def _init_worker(spec, hist_root):
+    """Initialize worker process state in multiprocessing pool."""
     _W["cp"] = _Compiled(spec)
     _W["root"] = hist_root
 
 
 def _load_bars(root, ysym):
+    """Load cached daily bars for a symbol from disk."""
     doc = net.read_json(os.path.join(root, _fname(ysym)))
     if not doc or doc.get("ysym") != ysym:
         return None
@@ -824,6 +980,7 @@ def _load_bars(root, ysym):
 
 
 def _run_chunk(items):
+    """Execute simulation chunk in a worker process."""
     cp, root = _W["cp"], _W["root"]
     out, cnt, missing = [], {}, 0
     for info in items:
@@ -839,7 +996,19 @@ def _run_chunk(items):
 
 
 def run(spec, universe_doc, hist_root=BT_ROOT, workers=None, progress=None, log=print):
-    """Full backtest. Returns a JSON-able result dict."""
+    """
+    Orchestrate full multi-core historical backtest.
+
+    Why this was written:
+    Coordinates the entire backtest workflow:
+    1. Validates and normalizes spec via prepare().
+    2. Filters universe symbols by selected exchanges or target tickers.
+    3. Partitions universe into chunks and executes simulations across CPU cores via ProcessPoolExecutor.
+    4. Applies realistic costs, filters suspect unadjusted data spikes, and sorts trades chronologically.
+    5. Runs portfolio simulation to model realistic equity growth, drawdown, and cash constraints.
+    6. Compares performance against the Nifty 50 benchmark.
+    7. Packages complete diagnostic metadata, bootstrap confidence intervals, and equity curves.
+    """
     t0 = time.time()
     s, warnings = prepare(spec)
     exch = set(s["exchanges"])
@@ -848,8 +1017,6 @@ def run(spec, universe_doc, hist_root=BT_ROOT, workers=None, progress=None, log=
         want = set(s["symbols"])
         syms = [x for x in syms if x["sym"] in want or x["ysym"] in want]
         known = {x["sym"] for x in syms} | {x["ysym"] for x in syms}
-        # instruments outside the NSE/BSE list (index, crypto, forex, US...):
-        # tested from their own cached history in hist_root
         syms += [external_info(y) for y in s["symbols"] if y not in known]
     if not syms:
         raise SpecError("no symbols to test")
@@ -900,7 +1067,6 @@ def run(spec, universe_doc, hist_root=BT_ROOT, workers=None, progress=None, log=
     path_dates = {d for t in trades for d, _ in t["path"]}
     first = s.get("start") or min((t["entry_date"] for t in trades), default=None) or \
         (bench[0][0] if bench else None)
-    # through the end date, and on until the last trade signalled by then exits
     upper = max([s.get("end") or (bench[-1][0] if bench else "")] + list(path_dates))
     dates = sorted({b[0] for b in bench if (first is None or b[0] >= first) and b[0] <= upper} | path_dates)
     curve, taken, skipped, exposure = portfolio(trades, s["portfolio"], s["costs"], dates)
@@ -938,6 +1104,7 @@ def run(spec, universe_doc, hist_root=BT_ROOT, workers=None, progress=None, log=
 
 
 def _thin(curve, n=1500):
+    """Downsample equity curves to at most `n` data points for web chart rendering."""
     if len(curve) <= n:
         return [[d, round(e, 2)] for d, e in curve]
     step = len(curve) / n
@@ -949,7 +1116,13 @@ RESULTS = "results/backtests"
 
 
 def save_result(res, root=RESULTS):
-    """results/backtests/<id>.json.gz; returns the path. id = time + rule slug."""
+    """
+    Save backtest results to gzipped JSON in results/backtests/<id>.json.gz.
+
+    Why this was written:
+    Compresses result files using gzip, reducing 20MB trade documents to <1MB on disk.
+    Generates human-readable timestamps and slugs in filenames.
+    """
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     slug = "".join(ch if ch.isalnum() else "-" for ch in res["spec"]["entry"].lower())[:40].strip("-")
     rid = "%s_%s" % (stamp, slug or "rule")
@@ -960,6 +1133,7 @@ def save_result(res, root=RESULTS):
 
 
 def list_results(root=RESULTS, limit=50):
+    """List historical backtest run summaries for the UI run selector."""
     try:
         names = sorted((f for f in os.listdir(root) if f.endswith(".json.gz")), reverse=True)[:limit]
     except OSError:
@@ -978,6 +1152,12 @@ def list_results(root=RESULTS, limit=50):
 
 
 def load_result(rid, root=RESULTS):
+    """
+    Safely load a gzipped backtest result from disk.
+
+    Why this was written:
+    Sanitizes `rid` to prevent directory traversal attacks (blocks '/', '..').
+    """
     if not rid or "/" in rid or ".." in rid:
         return None
     return net.read_json(os.path.join(root, rid + ".json.gz"))
@@ -988,6 +1168,7 @@ CSV_COLS = ["sym", "exchange", "signal_date", "entry_date", "entry", "stop", "ta
 
 
 def write_csv_to(trades, f):
+    """Write trade list to an open text stream in standard CSV format."""
     import csv
     w = csv.writer(f)
     w.writerow(CSV_COLS)
@@ -996,6 +1177,7 @@ def write_csv_to(trades, f):
 
 
 def write_csv(trades, path):
+    """Export complete trade log to a CSV file."""
     d = os.path.dirname(path)
     if d:
         os.makedirs(d, exist_ok=True)

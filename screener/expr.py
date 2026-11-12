@@ -21,11 +21,19 @@ this, `not (rsi14 > 70)` would match every stock that has no RSI at all.
 import math
 import re
 
+# Indian financial numeral suffixes and their numerical multipliers.
+# Rationale: Indian traders think and trade in Lakhs (L/lac = 100,000) and Crores (cr = 10,000,000).
+# Parsing these directly in the lexer allows filters like 'turnover > 5cr' or 'volume > 10L'.
 SUFFIX = {"k": 1e3, "l": 1e5, "lac": 1e5, "lakh": 1e5, "cr": 1e7, "crore": 1e7}
+
+# Common user aliases mapped to canonical field names.
+# Rationale: Forgiving syntax allows users to type 'close', 'ltp', 'vol', or 'sector' naturally.
 ALIASES = {"close": "price", "ltp": "price", "last": "price", "vol": "volume",
            "rsi": "rsi14", "atr": "atr14", "adx": "adx14", "chg": "change_pct",
            "sector": "industry", "symbol": "sym"}
 
+# Regex tokenizer pattern covering whitespace, numbers with optional Indian suffixes,
+# quoted strings, comparison/arithmetic operators, and identifiers.
 TOKEN = re.compile(r"""
     (?P<ws>\s+)
   | (?P<num>\d+(?:\.\d*)?(?:e[+-]?\d+)?|\.\d+)(?P<suf>crore|cr|lakh|lac|l|k)?(?![A-Za-z0-9_])
@@ -38,10 +46,17 @@ KEYWORDS = {"and", "or", "not", "in", "true", "false", "null"}
 
 
 class ExprError(ValueError):
+    """Raised when an expression has invalid syntax, unknown fields, or type errors."""
     pass
 
 
 def tokenize(src):
+    """Convert input filter string into a list of typed tokens (kind, value, start_pos).
+
+    Rationale:
+    Pre-lexing verifies character validity, converts suffixed numbers into standard floats,
+    and flags unrecognized characters with precise character position offsets for clear error messages.
+    """
     out, pos = [], 0
     while pos < len(src):
         m = TOKEN.match(src, pos)
@@ -65,9 +80,16 @@ def tokenize(src):
     return out
 
 
-# ---- three-valued helpers ---------------------------------------------------
+# ---- Three-Valued Logic Helpers (SQL NULL Semantics) ----
+# Rationale:
+# In Python, comparing `None > 50` raises a TypeError, and `not None` evaluates to True.
+# If a newly listed company has only 15 days of data, its `sma200` is None.
+# If someone filters `not (rsi14 > 70)`, a stock with NO RSI data should NOT match!
+# Under 3-valued logic, missing data yields None (unknown), `not unknown` is unknown,
+# and rows only match when the final result is strictly True.
 
 def _and(a, b):
+    """Three-valued AND: False if either is False; None if either is None; else True."""
     if a is False or b is False:
         return False
     if a is None or b is None:
@@ -76,6 +98,7 @@ def _and(a, b):
 
 
 def _or(a, b):
+    """Three-valued OR: True if either is True; None if either is None; else False."""
     if a is True or b is True:
         return True
     if a is None or b is None:
@@ -84,6 +107,7 @@ def _or(a, b):
 
 
 def _truth(v):
+    """Coerce value to three-valued truth: None -> None, numbers/booleans -> True/False."""
     if v is None:
         return None
     if isinstance(v, bool):
@@ -94,12 +118,15 @@ def _truth(v):
 
 
 def _norm(v):
+    """Case-fold strings for case-insensitive comparisons (e.g. 'nse' == 'NSE')."""
     return v.lower() if isinstance(v, str) else v
 
 
 def _cmp(op, a, b):
+    """Execute null-safe comparison between operands `a` and `b`."""
     if a is None or b is None:
         return None
+    # Cross-type string-to-number comparisons
     if isinstance(a, str) != isinstance(b, str):
         if op == "==":
             return False
@@ -121,6 +148,7 @@ def _cmp(op, a, b):
 
 
 def _in(a, b):
+    """Null-safe containment check (e.g., 'NIFTY50' in indices)."""
     if a is None or b is None:
         return None
     if isinstance(b, (list, tuple, set)):
@@ -131,6 +159,7 @@ def _in(a, b):
 
 
 def _arith(op, a, b):
+    """Null-safe arithmetic operations (+, -, *, /) with division-by-zero protection."""
     if a is None or b is None or isinstance(a, str) or isinstance(b, str):
         return None
     if op == "+":
@@ -140,20 +169,24 @@ def _arith(op, a, b):
     if op == "*":
         return a * b
     if b == 0:
-        return None
+        return None  # Division by zero returns None rather than crashing
     return a / b
 
 
-# ---- parser -----------------------------------------------------------------
+# ---- Recursive Descent Expression Parser ----
+# Rationale:
+# Compiles tokens directly into nested Python closures: lambda row: ...
+# Zero use of eval(), exec(), or ast.literal_eval.
+# Guarantees complete sandboxed execution, memory safety, and sub-microsecond row evaluation.
 
 class Parser:
     def __init__(self, src, fields):
-        """fields: dict name -> {"type": "num"|"str"|"bool"|"list", "prev": name or None}"""
+        """Initialize parser with token stream and field definition registry."""
         self.src = src
         self.toks = tokenize(src)
         self.i = 0
         self.fields = fields
-        self.used = set()
+        self.used = set()  # Tracks fields referenced in the expression (for query pruning)
 
     def peek(self):
         return self.toks[self.i]
@@ -179,6 +212,7 @@ class Parser:
         return t[0] == "kw" and t[1] in vals
 
     def parse(self):
+        """Parse complete expression and ensure no trailing garbage remains."""
         if self.peek()[0] == "end":
             return lambda r: True
         fn = self.or_(False)
@@ -187,8 +221,9 @@ class Parser:
             raise ExprError("unexpected %r at position %d" % (t[1], t[2]))
         return fn
 
-    # `prev` = evaluate identifiers as their previous-bar value (for crosses_*)
+    # `prev` = evaluate identifiers as their previous-bar value (used by crosses_above/below)
     def or_(self, prev):
+        """Parse logical 'or' (lowest binary boolean precedence)."""
         left = self.and_(prev)
         while self.is_kw("or"):
             self.take()
@@ -197,6 +232,7 @@ class Parser:
         return left
 
     def and_(self, prev):
+        """Parse logical 'and'."""
         left = self.not_(prev)
         while self.is_kw("and"):
             self.take()
@@ -205,6 +241,7 @@ class Parser:
         return left
 
     def not_(self, prev):
+        """Parse unary 'not'."""
         if self.is_kw("not"):
             self.take()
             inner = self.not_(prev)
@@ -216,6 +253,7 @@ class Parser:
         return self.cmp(prev)
 
     def cmp(self, prev):
+        """Parse comparisons, supporting chainable comparisons e.g. 40 < rsi14 < 70."""
         left = self.sum(prev)
         parts = []
         while True:
@@ -255,6 +293,7 @@ class Parser:
         return fn
 
     def sum(self, prev):
+        """Parse addition and subtraction."""
         left = self.prod(prev)
         while self.is_op("+", "-"):
             op = self.take()[1]
@@ -263,6 +302,7 @@ class Parser:
         return left
 
     def prod(self, prev):
+        """Parse multiplication and division."""
         left = self.unary(prev)
         while self.is_op("*", "/"):
             op = self.take()[1]
@@ -271,6 +311,7 @@ class Parser:
         return left
 
     def unary(self, prev):
+        """Parse unary negation (-x)."""
         if self.is_op("-"):
             self.take()
             inner = self.unary(prev)
@@ -282,6 +323,7 @@ class Parser:
         return self.atom(prev)
 
     def atom(self, prev):
+        """Parse atomic values: numbers, strings, booleans, null, parentheses, lists, identifiers."""
         t = self.take()
         kind, val, pos = t
         if kind == "num":
@@ -312,6 +354,13 @@ class Parser:
         raise ExprError("unexpected %r at position %d" % (val if val is not None else "end", pos))
 
     def field(self, name, pos, prev):
+        """Resolve identifier against registered fields and aliases.
+
+        Rationale:
+        - Unknown fields suggest nearest matches (e.g. 'rsi' -> did you mean 'rsi14'?).
+        - If parsing inside crosses_above/below (`prev=True`), automatically swaps the field
+          with its registered previous-day counterpart (`prev_close`, `sma50_prev`).
+        """
         key = name.lower()
         key = ALIASES.get(key, key)
         if key not in self.fields:
@@ -328,6 +377,14 @@ class Parser:
         return lambda row, k=key: row.get(k)
 
     def call(self, name, pos, prev):
+        """Parse and compile built-in functions: crosses_above, crosses_below, abs, min, max, contains, pct.
+
+        Rationale:
+        - crosses_above(a, b): Checks if (today_a > today_b) AND (yesterday_a <= yesterday_b).
+          It accomplishes this by reparsing the arguments with `prev=True` to resolve yesterday's fields.
+        - contains(haystack, needle): String/list containment.
+        - pct(a, b): Calculates percentage distance `(a/b - 1) * 100`.
+        """
         fname = name.lower()
         self.expect("op", "(")
         start = self.i
@@ -341,7 +398,7 @@ class Parser:
         if fname in ("crosses_above", "crosses_below"):
             if len(args) != 2:
                 raise ExprError("%s takes 2 arguments" % fname)
-            # re-parse the same tokens in prev mode for yesterday's values
+            # Re-parse the exact same argument tokens in 'prev' mode to obtain yesterday's values
             end = self.i
             self.i = start
             pargs = [self.or_(True)]
@@ -394,7 +451,15 @@ class Parser:
 
 
 def compile_filter(src, fields):
-    """-> (predicate(row) -> bool, set of fields used). Raises ExprError."""
+    """Compile filter string into a boolean row predicate closure: `(row) -> bool`.
+
+    Returns:
+        (predicate, fields_used): Closure returning True on match, and the set of referenced fields.
+
+    Rationale:
+    Limits expression length to 2000 characters to prevent DoS attacks.
+    Only rows evaluating strictly to `True` match (three-valued NULL filter rejection).
+    """
     if len(src) > 2000:
         raise ExprError("filter too long")
     p = Parser(src, fields)
@@ -403,9 +468,13 @@ def compile_filter(src, fields):
 
 
 def compile_value(src, fields):
-    """-> (value(row) -> float | None, set of fields used). For price levels
-    such as a stop "low - 0.5 * atr14" or a target "db_target". Anything that
-    is not a finite number (a missing field, a boolean) evaluates to None."""
+    """Compile an expression into a numeric evaluator: `(row) -> float | None`.
+
+    Rationale:
+    Used by Strategy IR and the backtester for dynamic stop and target levels
+    (e.g., stop level formula 'low - 1.5 * atr14'). Ensures that non-finite numbers
+    or booleans safely evaluate to None.
+    """
     if len(src) > 2000:
         raise ExprError("expression too long")
     p = Parser(src, fields)

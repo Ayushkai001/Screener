@@ -32,16 +32,37 @@ CONFIG = os.path.join(DATA, "config.json")
 
 
 def load_config():
+    """
+    Load user configuration overrides from data/config.json.
+
+    Why this was written:
+    Allows users to set default rate limits, worker counts, port numbers, and exchange preferences
+    persistently without having to pass repeated command-line flags on every run.
+    """
     return net.read_json(CONFIG) or {}
 
 
 def exchanges_from(a, cfg):
+    """
+    Resolve active stock exchanges from CLI flags and configuration.
+
+    Why this was written:
+    CLI arguments take precedence over config defaults. Maps user choices ('nse', 'bse', 'both')
+    to standard exchange tuples used throughout the screener.
+    """
     if getattr(a, "exchange", None):
         return {"nse": ("NSE",), "bse": ("BSE",), "both": ("NSE", "BSE")}[a.exchange]
     return tuple(cfg.get("exchanges", ("NSE", "BSE")))
 
 
 def cmd_universe(a, cfg):
+    """
+    CLI command: Download official Bhavcopy and equity lists to construct data/universe.json.
+
+    Why this was written:
+    Creates the foundational stock universe ordered by daily turnover (liquidity).
+    Filters out debt instruments, mutual funds, and ETFs so screening focuses exclusively on tradable equities.
+    """
     client = net.Client(net.RateLimiter(rate=2.0))
     doc = universe.fetch_and_build(client, include_sme=a.sme or cfg.get("include_sme", False),
                                    exchanges=exchanges_from(a, cfg))
@@ -54,14 +75,22 @@ def cmd_universe(a, cfg):
 
 
 def ensure_universe(cfg, cal):
-    """Load the universe; rebuild it when missing or older than the last
-    completed session's bhavcopy (new listings, renames, suspensions)."""
+    """
+    Verify universe freshness and automatically rebuild if outdated or missing.
+
+    Why this was written:
+    Corporate actions (new listings, company renames, suspensions, delistings) happen daily.
+    Official NSE/BSE bhavcopies are published every trading day between 18:00 and 19:00 IST.
+    This function checks if the cached universe is older than the last completed trading session.
+    If stale and past 19:00 IST, it automatically rebuilds the universe from the latest bhavcopy,
+    falling back to cached data gracefully if exchange servers are temporarily unreachable.
+    """
     doc = net.read_json(UNIVERSE)
     want = cal.last_completed_session(now_utc())
     have = None
     if doc:
         have = max((d for d in (doc.get("bhavcopy") or {}).values() if d), default=None)
-    # bhavcopies appear ~18:00-19:00 IST; before then yesterday's is the newest
+    # Bhavcopies appear ~18:00-19:00 IST; before then yesterday's session is the latest available.
     stale = doc is None or (have or "") < cal.prev_trading_day(want).isoformat() or (
         (have or "") < want.isoformat() and now_utc().astimezone(IST).hour >= 19)
     if stale:
@@ -80,17 +109,32 @@ def ensure_universe(cfg, cal):
 
 
 def make_engine(cfg, a=None):
+    """
+    Instantiate and configure the central real-time Engine.
+
+    Why this was written:
+    Centralizes engine initialization for CLI scan, sync, and serve commands.
+    Loads the holiday calendar, verifies universe freshness, applies top-N liquidity slices
+    if requested, and merges engine configuration parameters.
+    """
     from screener.engine import Engine
     cal = Calendar.load(os.path.join(DATA, "holidays.json"))
     doc = ensure_universe(cfg, cal)
     if a is not None and getattr(a, "top", None):
-        doc = dict(doc, symbols=doc["symbols"][:a.top])   # most traded first
+        doc = dict(doc, symbols=doc["symbols"][:a.top])   # Slice top N most traded symbols
     eng_cfg = {k: cfg[k] for k in ("workers", "rate", "max_rate", "focus_interval", "sweep_interval_open",
                                    "sweep_interval_idle", "fetch_open", "min_turnover") if k in cfg}
     return Engine(doc, eng_cfg, cal, hist_root=os.path.join(DATA, "history"))
 
 
 def cmd_serve(a, cfg):
+    """
+    CLI command: Launch live screener engine and start web server.
+
+    Why this was written:
+    Starts background engine market polling threads and launches the threaded HTTP server
+    to serve the browser interface, SSE streaming, and STRATLAB strategy studio.
+    """
     from screener import server
     eng = make_engine(cfg, a)
     eng.start()
@@ -99,9 +143,17 @@ def cmd_serve(a, cfg):
 
 
 def cmd_sync(a, cfg):
+    """
+    CLI command: Foreground synchronization of 2-year daily history.
+
+    Why this was written:
+    Allows users to pre-populate historical daily bars in a fast, dedicated multi-threaded
+    batch without waiting for the live screener's credit-throttled background scheduler.
+    Uses ThreadPoolExecutor to saturate the configured request rate limit.
+    """
     eng = make_engine(cfg, a)
     n = eng.history.load(eng.order)
-    eng._queue_history_due()                 # fills the queue; we run it here instead
+    eng._queue_history_due()                 # Populate synchronization queue
     rank = {s: i for i, s in enumerate(eng.order)}
     todo = sorted(eng._queued_hist, key=rank.get)
     eng._tasks.clear()
@@ -128,6 +180,15 @@ def cmd_sync(a, cfg):
 
 
 def fmt(v, kind):
+    """
+    Format field values for clean CLI tabular display.
+
+    Why this was written:
+    Provides Indian numbering formatters for volumes and financial figures:
+    - Volume: formats in Lakhs (L) for <10M and Crores (Cr) for >=10M.
+    - Money: formats in ₹...Cr.
+    - Percentages: formatted with explicit +/- signs.
+    """
     if v is None:
         return "-"
     if kind == "pct":
@@ -144,12 +205,22 @@ def fmt(v, kind):
 
 
 def cmd_scan(a, cfg):
+    """
+    CLI command: Execute a one-shot screening query from the terminal.
+
+    Why this was written:
+    Allows scripting, shell automation, and quick ad-hoc queries from the command line:
+    1. Validates the filter expression first before initiating network requests.
+    2. Starts the engine and waits for at least one full market sweep.
+    3. Formats matching rows into an aligned ASCII table.
+    4. Prints regulatory and financial disclaimer.
+    """
     from screener import server
     from screener.fields import FIELDS
     eng = make_engine(cfg, a)
     eng.cfg["fetch_open"] = False
     try:
-        server._compile(a.filter)   # fail fast on a bad filter, before any network
+        server._compile(a.filter)   # Fail fast on bad filter syntax before issuing network requests
     except Exception as e:
         print("filter error: %s" % e, file=sys.stderr)
         return 1
@@ -177,7 +248,13 @@ def cmd_scan(a, cfg):
 
 
 def _amount(x):
-    """'1cr' / '50L' / '5k' / '250000' -> float."""
+    """
+    Parse monetary amounts with Indian numeric suffixes ('1cr', '50L', '5k', '250000').
+
+    Why this was written:
+    Provides intuitive notation for capital and turnover arguments:
+    '1cr' -> 10,000,000; '50L' -> 5,000,000; '10k' -> 10,000.
+    """
     x = str(x).strip().lower().replace(",", "").replace("₹", "")
     for suf, k in (("cr", 1e7), ("l", 1e5), ("k", 1e3)):
         if x.endswith(suf):
@@ -186,8 +263,14 @@ def _amount(x):
 
 
 def cmd_bt_sync(a, cfg):
-    """10-year daily history for the backtester (data/history_bt). Separate
-    from the screener's 2-year cache; incremental after the first run."""
+    """
+    CLI command: Download and cache 10-year daily history for backtesting.
+
+    Why this was written:
+    Backtesting requires deep historical data (up to 10 years / 2,600 bars) across the universe.
+    This command stores the 10-year data separately in `data/history_bt` to keep the live screener's
+    lean 2-year cache small and fast to load into memory.
+    """
     from screener import backtest as bt
     from screener.history import HistoryStore
     cal = Calendar.load(os.path.join(DATA, "holidays.json"))
@@ -221,6 +304,12 @@ def cmd_bt_sync(a, cfg):
 
 
 def bt_spec_from_args(a):
+    """
+    Map command-line arguments to a backtest specification dictionary.
+
+    Why this was written:
+    Translates CLI flags into the standardized specification dictionary consumed by backtest.py.
+    """
     spec = {"entry": a.filter, "entry_mode": a.entry_mode, "entry_level": a.level,
             "entry_valid_days": a.valid, "max_gap_pct": a.max_gap, "stop": a.stop, "target": a.target,
             "trail": a.trail, "max_hold": a.hold, "exit": a.exit or "", "start": a.start, "end": a.end,
@@ -235,6 +324,18 @@ def bt_spec_from_args(a):
 
 
 def print_bt(res):
+    """
+    Render comprehensive backtest report in terminal.
+
+    Why this was written:
+    Outputs key statistical benchmarks:
+    - Win rate, profit factor, average win/loss.
+    - Mathematical expectancy per trade with 95% bootstrap confidence intervals.
+    - Portfolio CAGR, total return, maximum drawdown, Sharpe ratio.
+    - Benchmark comparison against Nifty 50 buy-and-hold over the exact same period.
+    - Year-by-year performance consistency.
+    - Diagnostic warnings regarding look-ahead bias and survivorship bias.
+    """
     ex, pf, bm = res["every_signal"], res["portfolio"], res.get("benchmark") or {}
 
     def f(v, fmt="%.2f"):
@@ -266,6 +367,13 @@ def print_bt(res):
 
 
 def cmd_backtest(a, cfg):
+    """
+    CLI command: Execute a historical backtest from the terminal.
+
+    Why this was written:
+    Provides command-line backtesting with live progress tracking, result persistence,
+    and optional CSV trade log export.
+    """
     from screener import backtest as bt
     cal = Calendar.load(os.path.join(DATA, "holidays.json"))
     doc = net.read_json(UNIVERSE) or ensure_universe(cfg, cal)
@@ -294,17 +402,33 @@ def cmd_backtest(a, cfg):
 
 
 def main(argv=None):
+    """
+    CLI argument parser and subcommand router.
+
+    Why this was written:
+    Configures command-line parser with all subcommands (universe, serve, sync, scan, bt-sync, backtest).
+    Enforces line buffering on stdout so progress updates are flushed immediately to pipes, nohup,
+    or launchd logging streams.
+    """
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
+
+    # Subcommand: universe
     u = sub.add_parser("universe")
     u.add_argument("--sme", action="store_true")
     u.add_argument("--exchange", choices=["nse", "bse", "both"])
+
+    # Subcommand: serve
     s = sub.add_parser("serve")
     s.add_argument("--host")
     s.add_argument("--port", type=int)
     s.add_argument("--top", type=int, help="only the N most traded symbols")
+
+    # Subcommand: sync
     y = sub.add_parser("sync")
     y.add_argument("--top", type=int, help="only the N most traded symbols")
+
+    # Subcommand: scan
     c = sub.add_parser("scan")
     c.add_argument("filter")
     c.add_argument("--sort", default="turnover")
@@ -313,8 +437,12 @@ def main(argv=None):
     c.add_argument("--cols", default="sym,price,change_pct,volume,rvol_tod,rsi14,turnover,industry")
     c.add_argument("--timeout", type=float, default=120)
     c.add_argument("--top", type=int, help="only the N most traded symbols")
+
+    # Subcommand: bt-sync
     z = sub.add_parser("bt-sync")
     z.add_argument("--top", type=int, help="only the N most traded symbols")
+
+    # Subcommand: backtest
     b = sub.add_parser("backtest")
     b.add_argument("filter", help="entry rule (screener filter language)")
     b.add_argument("--entry-mode", default="next_open", choices=["next_open", "signal_close", "buy_stop"])
@@ -341,8 +469,9 @@ def main(argv=None):
     b.add_argument("--top", type=int, help="only the N most traded symbols")
     b.add_argument("--workers", type=int)
     b.add_argument("--csv", help="also write the trade list to this CSV")
+
     a = p.parse_args(argv)
-    try:   # progress must reach logs even when stdout is a file/pipe (nohup, launchd)
+    try:   # Progress must reach logs even when stdout is redirected to a file or pipe
         sys.stdout.reconfigure(line_buffering=True)
     except AttributeError:
         pass

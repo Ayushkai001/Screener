@@ -7,15 +7,26 @@ indicators.live() and list it here.
 
 from .indicators import EMA_N, SMA_N
 
-# name: (label, type, format, group, prev_field)
-# format: price | pct | num | int | vol | money | ratio | text | bool | time | list
+# Master field schema tuples: (name, label, type, format, group, prev_field)
+# Rationale:
+#   name: Identifier used in Python dicts and filter expressions (e.g., 'rsi14').
+#   label: Clean human-readable display header for UI tables and charts.
+#   type: 'num' | 'str' | 'bool' | 'list' - used by expr.py parser for type-checking.
+#   format: 'price' | 'pct' | 'num' | 'int' | 'vol' | 'money' | 'ratio' | 'text' | 'bool' | 'time' | 'list'
+#           determines localized display in UI (e.g., Lakh/Crore suffix, % sign, decimals).
+#   group: Category for the visual column picker (Info, Price, Volume, Oscillators, etc.).
+#   prev_field: The counterpart field name holding yesterday's value (e.g., 'prev_close' for 'price').
+#               Required by expr.py for crosses_above() and crosses_below() to detect transitions.
 _F = [
+    # ---- Company & Symbol Metadata ----
     ("sym", "Symbol", "str", "text", "Info", None),
     ("name", "Name", "str", "text", "Info", None),
     ("exchange", "Exch", "str", "text", "Info", None),
     ("series", "Series", "str", "text", "Info", None),
     ("industry", "Industry", "str", "text", "Info", None),
     ("indices", "Indices", "list", "list", "Info", None),
+
+    # ---- Live Price & Session Range ----
     ("price", "Price", "num", "price", "Price", "prev_close"),
     ("change", "Chg", "num", "price", "Price", None),
     ("change_pct", "Chg %", "num", "pct", "Price", None),
@@ -27,6 +38,8 @@ _F = [
     ("chg_from_open", "Chg from Open %", "num", "pct", "Price", None),
     ("range_pct", "Day Range %", "num", "pct", "Price", None),
     ("close_in_range", "Pos in Range", "num", "ratio", "Price", None),
+
+    # ---- Volume & Liquidity ----
     ("volume", "Volume", "num", "vol", "Volume", "prev_volume"),
     ("prev_volume", "Prev Volume", "num", "vol", "Volume", None),
     ("turnover", "Turnover", "num", "money", "Volume", None),
@@ -35,6 +48,8 @@ _F = [
     ("avg_vol50", "Avg Vol 50D", "num", "vol", "Volume", None),
     ("rvol", "Rel Vol", "num", "ratio", "Volume", None),
     ("rvol_tod", "Rel Vol (time adj)", "num", "ratio", "Volume", None),
+
+    # ---- Oscillators & Momentum ----
     ("rsi14", "RSI 14", "num", "num", "Oscillators", "rsi14_prev"),
     ("rsi14_prev", "RSI 14 (prev)", "num", "num", "Oscillators", None),
     ("macd", "MACD", "num", "num", "Oscillators", "macd_prev"),
@@ -45,12 +60,16 @@ _F = [
     ("adx14", "ADX 14", "num", "num", "Oscillators", None),
     ("plus_di", "+DI", "num", "num", "Oscillators", None),
     ("minus_di", "-DI", "num", "num", "Oscillators", None),
+
+    # ---- Volatility Bands ----
     ("atr14", "ATR 14", "num", "price", "Volatility", None),
     ("atr_pct", "ATR %", "num", "pct", "Volatility", None),
     ("bb_upper", "BB Upper", "num", "price", "Volatility", None),
     ("bb_lower", "BB Lower", "num", "price", "Volatility", None),
     ("bb_pctb", "BB %B", "num", "ratio", "Volatility", None),
     ("bb_width", "BB Width %", "num", "pct", "Volatility", None),
+
+    # ---- Historical Performance & High/Low Extremes ----
     ("high_52w", "52W High", "num", "price", "Performance", None),
     ("low_52w", "52W Low", "num", "price", "Performance", None),
     ("from_52w_high", "From 52W High %", "num", "pct", "Performance", None),
@@ -63,6 +82,8 @@ _F = [
     ("chg_6m", "Perf 6M %", "num", "pct", "Performance", None),
     ("chg_1y", "Perf 1Y %", "num", "pct", "Performance", None),
     ("chg_ytd", "Perf YTD %", "num", "pct", "Performance", None),
+
+    # ---- Double Bottom (W Pattern) Scoring & Trade Plan Fields ----
     ("db_score", "Double Bottom Score", "num", "int", "Patterns", None),
     ("db_neckline", "DB Neckline", "num", "price", "Patterns", None),
     ("db_target", "DB Target", "num", "price", "Patterns", None),
@@ -74,10 +95,16 @@ _F = [
     ("db_days_since_breakout", "DB Days Since Breakout", "num", "int", "Patterns", None),
     ("db_l1_date", "DB Trough 1 Date", "str", "text", "Patterns", None),
     ("db_l2_date", "DB Trough 2 Date", "str", "text", "Patterns", None),
+
+    # ---- Data Quality & Diagnostic Markers ----
     ("age", "Data Age (s)", "num", "int", "Data", None),
     ("hist_days", "History Bars", "num", "int", "Data", None),
     ("official_eod", "Official EOD", "bool", "bool", "Data", None),
 ]
+
+# Programmatically generate SMA and EMA moving average fields and their previous-day counterparts.
+# Rationale: Eliminates repetitive manual boilerplate while linking each average with its
+# corresponding '_prev' variant so crosses_above(sma50, sma200) can automatically resolve prior values.
 for n in SMA_N:
     _F.append(("sma%d" % n, "SMA %d" % n, "num", "price", "Moving Averages", "sma%d_prev" % n))
     _F.append(("sma%d_prev" % n, "SMA %d (prev)" % n, "num", "price", "Moving Averages", None))
@@ -85,27 +112,47 @@ for n in EMA_N:
     _F.append(("ema%d" % n, "EMA %d" % n, "num", "price", "Moving Averages", "ema%d_prev" % n))
     _F.append(("ema%d_prev" % n, "EMA %d (prev)" % n, "num", "price", "Moving Averages", None))
 
+# Discrete Boolean pattern indicators
+# Rationale: Pre-computed flags allowing users to write concise filter rules
+# like 'breakout_20d and volume_shock' rather than complex multi-line math.
 PATTERNS = [
-    ("breakout_20d", "20D closing-high breakout"), ("breakdown_20d", "20D closing-low breakdown"),
-    ("new_52w_high", "New 52-week high"), ("new_52w_low", "New 52-week low"),
-    ("reclaim_ma20", "Reclaimed SMA 20"), ("golden_cross", "Golden cross (50/200)"),
-    ("death_cross", "Death cross (50/200)"), ("macd_bull_cross", "MACD bullish cross"),
-    ("oversold", "RSI < 30"), ("overbought", "RSI > 70"), ("oversold_bounce", "Oversold bounce"),
-    ("volume_shock", "Volume shocker (3x)"), ("gap_up", "Gap up > 2%"), ("gap_down", "Gap down > 2%"),
-    ("nr7", "NR7 (narrowest range of 7)"), ("inside_day", "Inside day"),
-    ("bull_flag", "Bull flag (in the box)"), ("bull_flag_breakout", "Bull flag breakout"),
+    ("breakout_20d", "20D closing-high breakout"),
+    ("breakdown_20d", "20D closing-low breakdown"),
+    ("new_52w_high", "New 52-week high"),
+    ("new_52w_low", "New 52-week low"),
+    ("reclaim_ma20", "Reclaimed SMA 20"),
+    ("golden_cross", "Golden cross (50/200)"),
+    ("death_cross", "Death cross (50/200)"),
+    ("macd_bull_cross", "MACD bullish cross"),
+    ("oversold", "RSI < 30"),
+    ("overbought", "RSI > 70"),
+    ("oversold_bounce", "Oversold bounce"),
+    ("volume_shock", "Volume shocker (3x)"),
+    ("gap_up", "Gap up > 2%"),
+    ("gap_down", "Gap down > 2%"),
+    ("nr7", "NR7 (narrowest range of 7)"),
+    ("inside_day", "Inside day"),
+    ("bull_flag", "Bull flag (in the box)"),
+    ("bull_flag_breakout", "Bull flag breakout"),
     ("double_bottom", "Double bottom breakout (today, on volume)"),
     ("db_forming", "Double bottom forming (below neckline)"),
 ]
 for p, label in PATTERNS:
     _F.append((p, label, "bool", "bool", "Patterns", None))
 
+# Dictionary lookup mapping field name -> metadata dict.
+# Rationale: O(1) attribute lookup for the filter compiler and HTTP /api/meta endpoint.
 FIELDS = {name: {"label": lab, "type": typ, "fmt": fmt, "group": grp, "prev": prev}
           for name, lab, typ, fmt, grp, prev in _F}
 
+# Default columns displayed when opening the web UI for the first time.
+# Rationale: Provides an immediate overview of ticker, pricing, momentum, and sector.
 DEFAULT_COLUMNS = ["sym", "price", "change_pct", "volume", "rvol_tod", "rsi14",
                    "turnover", "from_52w_high", "industry", "exchange"]
 
+# Pre-configured trading setups available in the UI dropdown and CLI.
+# Rationale: Gives traders instant one-click access to battle-tested technical screens
+# with turnover floors (e.g., turnover > 1cr or 2cr) to eliminate illiquid penny stocks.
 PRESETS = [
     {"name": "Top gainers", "filter": "change_pct > 0 and turnover > 5cr", "sort": "change_pct", "desc": True},
     {"name": "Top losers", "filter": "change_pct < 0 and turnover > 5cr", "sort": "change_pct", "desc": False},

@@ -45,10 +45,12 @@ from . import backtest, expr, net
 from .fields import FIELDS, PATTERNS
 
 # ---------------------------------------------------------------- catalog
-# id: (label, group, field template, params, overlay, prev?)
-#   template: field name, "{period}" filled from params
-#   overlay:  "price" (drawn on the candles), "pane" (own pane), None
-#   params:   [(name, default, min, max)]
+# Catalog of indicators available in the visual strategy builder.
+# Format: (id, label, category_group, field_template, parameter_schema, chart_overlay)
+# - field_template: formatting string such as "ema{period}" that produces the exact indicator column.
+# - parameter_schema: list of (param_name, default, min, max).
+# - chart_overlay: "price" draws on the main candle chart; "pane" creates an oscillator subpane;
+#   None denotes purely tabular metrics that are not plotted as a time-series line.
 _P = [("period", 14, 2, backtest.CUSTOM_MAX)]
 INDICATORS = [
     ("close", "Close", "Price", "price", [], "price"),
@@ -90,19 +92,25 @@ INDICATORS = [
 ]
 IND = {i[0]: i for i in INDICATORS}
 
+# Supported comparison and crossover operators in conditions.
 OPS = {
     "crosses_above": "crosses above", "crosses_below": "crosses below",
     ">": "is above", "<": "is below", ">=": "is at or above", "<=": "is at or below",
     "between": "is between", "rising": "is rising", "falling": "is falling",
 }
+# Operators that require only a left operand and compare it to its own previous-day value.
 UNARY = {"rising", "falling"}
+
 STOP_TYPES = ("none", "pct", "atr", "level")
 TARGET_TYPES = ("none", "pct", "atr", "r", "level")
 TRAIL_TYPES = ("none", "pct", "atr")
 TIMEFRAMES = {"1d": "Daily"}
+
+# Safety limits on recursion and condition count to prevent denial-of-service via huge ASTs.
 MAX_DEPTH = 6
 MAX_CONDS = 40
 
+# Predefined commission, statutory tax, and slippage cost profiles.
 COST_PROFILES = {
     "india_delivery": "India equity delivery: STT, stamp, exchange, SEBI, GST, DP + slippage",
     "flat": "Flat % per side + slippage (crypto, forex, US, indices)",
@@ -112,11 +120,19 @@ ROOT = "strategies"
 
 
 class StrategyError(ValueError):
+    """Raised when Strategy IR validation or compilation encounters an error."""
     pass
 
 
 def catalog():
-    """Everything the builder UI needs to draw its dropdowns."""
+    """
+    Export indicator catalog and grammar metadata for builder UI dropdowns.
+
+    Why this was written:
+    Provides the frontend single-page app with full knowledge of allowed indicators,
+    their parameter ranges, visual overlay types, and whether they can participate
+    in crossover rules, keeping frontend and backend synchronized.
+    """
     return {
         "indicators": [{"id": i, "label": lab, "group": grp, "params": [
             {"name": n, "default": d, "min": lo, "max": hi} for n, d, lo, hi in ps],
@@ -130,7 +146,16 @@ def catalog():
 
 
 def _has_prev(tpl, params):
-    if params:          # ema/sma/rsi: built-in and custom periods all have _prev
+    """
+    Determine whether an indicator series tracks yesterday's value for crossover detection.
+
+    Why this was written:
+    Crossover logic (crosses_above / crosses_below) and trend checks (rising / falling)
+    mathematically require evaluating day t and day t-1. Indicators with custom periods
+    (EMA, SMA, RSI) and primary price series have previous-day values available. Static
+    or non-temporal fields do not, and must be disallowed from crossover operations.
+    """
+    if params:          # ema/sma/rsi: built-in and custom periods all compute previous-day values
         return True
     if tpl == "price":
         return True
@@ -138,6 +163,14 @@ def _has_prev(tpl, params):
 
 
 def default_strategy(symbol="RELIANCE.NS"):
+    """
+    Starter strategy template for the visual builder.
+
+    Why this was written:
+    Gives new users an immediate, fully valid, working trend-following template
+    (EMA 9 crossing above EMA 21 with a 50-day EMA trend filter) so the studio
+    never opens in a blank or broken state.
+    """
     ind = lambda i, p=None: {"kind": "ind", "ind": i, "params": p or {}}
     return {
         "version": 1, "name": "EMA 9/21 crossover",
@@ -165,6 +198,14 @@ def default_strategy(symbol="RELIANCE.NS"):
 
 # ---------------------------------------------------------------- compile
 def _num(v, path, lo=None, hi=None, integer=False):
+    """
+    Strict numeric validator with detailed JSON error pointer.
+
+    Why this was written:
+    Protects backtest execution from NaNs, infinities, booleans masquerading as ints,
+    or out-of-bounds parameters. Reports errors with precise JSON path notation
+    (e.g., 'portfolio.capital') so the frontend can highlight the exact offending input.
+    """
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         try:
             v = float(v)
@@ -182,11 +223,21 @@ def _num(v, path, lo=None, hi=None, integer=False):
 
 
 def _fmt(x):
+    """Format numeric values cleanly without trailing zero artifacts."""
     return ("%.10g" % x) if isinstance(x, float) else str(x)
 
 
 def operand(o, path):
-    """operand -> (expression text, field name or None, crossable)."""
+    """
+    Convert a visual builder operand into an executable expression string.
+
+    Why this was written:
+    Operands in the Strategy IR can be either static numeric literals or parameterized
+    technical indicators (with optional multipliers like 'ema50 * 1.02').
+    This function parses the parameters, validates parameter ranges against the indicator
+    catalog, applies multipliers, and checks if the operand supports previous-day lookups.
+    Returns: (expression_text, indicator_field_name, is_crossable).
+    """
     if not isinstance(o, dict):
         raise StrategyError("%s: missing" % path)
     kind = o.get("kind")
@@ -212,6 +263,17 @@ def operand(o, path):
 
 
 def _cond(c, path):
+    """
+    Compile a single condition node into a filter DSL expression.
+
+    Why this was written:
+    Translates condition primitives (patterns, unary rising/falling trends, binary comparisons,
+    range checks, and crossovers) into valid filter language text for expr.py.
+    Validates that:
+    - Rising/falling operations target indicators that have a previous-day series.
+    - Crossover operations (crosses_above/below) involve at least one valid indicator with historical continuity.
+    - Negations ('not') are properly wrapped in parentheses to maintain operator precedence.
+    """
     if c.get("type") == "pattern":
         p = c.get("pattern")
         if p not in dict(PATTERNS):
@@ -246,7 +308,15 @@ def _cond(c, path):
 
 
 def rule(g, path="entry", depth=0, count=None):
-    """group -> filter-language text."""
+    """
+    Compile a recursive boolean group into an expression string.
+
+    Why this was written:
+    Users can build arbitrarily nested condition trees (e.g. A and (B or C)).
+    This function walks the tree, enforces nesting depth limits (MAX_DEPTH=6) to prevent
+    stack overflows, ignores disabled rules, respects group negation, and inserts
+    parentheses when mixing AND and OR logic to ensure standard mathematical evaluation.
+    """
     count = count if count is not None else [0]
     if not isinstance(g, dict) or g.get("type") != "group":
         raise StrategyError("%s: must be a condition group" % path)
@@ -279,6 +349,13 @@ def rule(g, path="entry", depth=0, count=None):
 
 
 def _level(lv, path, types):
+    """
+    Translate risk stop/target objects into backtest DSL strings.
+
+    Why this was written:
+    Normalizes diverse exit level representations ('none', 'pct:N', 'atr:N', 'r:N', or 'expr:...')
+    into the concise string format consumed by backtest.py.
+    """
     lv = lv or {"type": "none"}
     t = lv.get("type") or "none"
     if t not in types:
@@ -292,6 +369,7 @@ def _level(lv, path, types):
 
 
 def _date(v, path):
+    """Validate ISO-8601 date string (YYYY-MM-DD)."""
     if not v:
         return None
     try:
@@ -301,7 +379,20 @@ def _date(v, path):
 
 
 def compile_strategy(ir):
-    """IR -> (backtest spec, human summary). Raises StrategyError."""
+    """
+    Compile a complete Strategy IR document into an executable backtest specification.
+
+    Why this was written:
+    Acts as the single gatekeeper between strategy definitions and backtest execution.
+    Responsibilities:
+    1. Validates supported action types (BUY long only) and timeframes (1d daily only).
+    2. Compiles entry and exit rule groups to filter expressions.
+    3. Normalizes execution models (next session open vs signal close vs buy stop).
+    4. Handles instrument selection: single-stock benchmark mode vs universe scanning.
+    5. Configures portfolio risk sizing and Indian delivery statutory tax models.
+    6. Performs pre-flight dry-run compilation via `backtest.prepare(spec)` to catch syntax errors
+       before allocating process pools.
+    """
     if not isinstance(ir, dict):
         raise StrategyError("strategy must be a JSON object")
     if (ir.get("action") or "BUY").upper() != "BUY":
@@ -346,7 +437,7 @@ def compile_strategy(ir):
         spec["exchanges"] = ["NSE", "BSE"]
         spec["min_turnover"] = 0
         if len(syms) == 1:
-            spec["benchmark"] = syms[0]          # buy & hold of the same instrument
+            spec["benchmark"] = syms[0]          # Benchmark against buy & hold of the instrument itself
     elif mode == "universe":
         ex_ = [e for e in ins.get("exchanges") or ["NSE"] if e in ("NSE", "BSE")]
         if not ex_:
@@ -386,7 +477,13 @@ def compile_strategy(ir):
 
 
 def describe(spec):
-    """One plain-language block for the UI, from the compiled spec."""
+    """
+    Format a concise, human-readable English summary of the compiled strategy.
+
+    Why this was written:
+    Provides immediate visual feedback in the UI showing exactly how the strategy's
+    entry trigger, execution timing, stop loss, profit target, and exit rules will behave.
+    """
     lines = ["WHEN   " + spec["entry"], "THEN   BUY at " + {
         "next_open": "the next session's open", "signal_close": "the signal day's close (optimistic)",
         "buy_stop": "a buy stop at %s" % spec.get("entry_level")}[spec.get("entry_mode", "next_open")]]
@@ -401,7 +498,15 @@ def describe(spec):
 
 
 def chart_fields(ir):
-    """Indicator fields the chart should draw for this strategy, with where."""
+    """
+    Extract all indicator fields referenced by entry and exit rules.
+
+    Why this was written:
+    The STRATLAB interactive chart builder needs to know which indicators to compute
+    and display on top of the candlestick chart. This function walks the AST and discovers
+    all referenced indicators (e.g. EMA 9, EMA 21, Bollinger Bands), along with their display
+    layer (main chart overlay vs separate oscillator pane).
+    """
     out, seen = [], set()
 
     def walk(node):
@@ -428,6 +533,7 @@ def chart_fields(ir):
 
 
 def _label(o):
+    """Generate display label for indicator with parameter values."""
     spec = IND[o["ind"]]
     ps = spec[4]
     if not ps:
@@ -437,12 +543,21 @@ def _label(o):
 
 # ---------------------------------------------------------------- library
 def _slug(name):
+    """Convert human-readable strategy name to safe filesystem filename."""
     s = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")[:60]
     return s or "strategy"
 
 
 def save(ir, root=ROOT):
-    compile_strategy(ir)                     # never save something that cannot run
+    """
+    Atomically save Strategy IR document to local disk.
+
+    Why this was written:
+    Compiles the strategy first to guarantee that unrunnable or corrupted strategies
+    are never persisted to disk. Uses atomic write (temp file + rename) to protect
+    against partial writes during crash or power loss.
+    """
+    compile_strategy(ir)                     # Never save something that cannot run
     sid = ir.get("id") or _slug(ir.get("name"))
     if not re.fullmatch(r"[a-z0-9-]{1,60}", sid):
         sid = _slug(sid)
@@ -454,6 +569,7 @@ def save(ir, root=ROOT):
 
 
 def load(sid, root=ROOT):
+    """Load saved Strategy IR document by sanitized identifier."""
     if not sid or not re.fullmatch(r"[a-z0-9-]{1,60}", sid):
         return None
     try:
@@ -464,6 +580,7 @@ def load(sid, root=ROOT):
 
 
 def delete(sid, root=ROOT):
+    """Safely delete saved Strategy IR file."""
     if not sid or not re.fullmatch(r"[a-z0-9-]{1,60}", sid):
         return False
     try:
@@ -474,6 +591,7 @@ def delete(sid, root=ROOT):
 
 
 def list_saved(root=ROOT):
+    """List all saved strategies with metadata for library drawer."""
     try:
         names = sorted(f for f in os.listdir(root) if f.endswith(".json"))
     except OSError:

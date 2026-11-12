@@ -39,10 +39,14 @@ import re
 from . import net
 from .clock import IST, now_utc
 
+# Official exchange data endpoints (public, no authentication needed)
+# Rationale: Standardized UDiFF format CSVs published by NSE and BSE after each trading day.
 NSE_BHAV = "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_%s_F_0000.csv.zip"
 BSE_BHAV = "https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_%s_F_0000.CSV"
 NSE_EQUITY_L = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
 NSE_INDEX = "https://nsearchives.nseindia.com/content/indices/%s.csv"
+
+# NIFTY index constituent lists for industry/sector tagging and index membership.
 INDEX_FILES = {
     "NIFTY50": "ind_nifty50list",
     "NIFTY100": "ind_nifty100list",
@@ -52,16 +56,38 @@ INDEX_FILES = {
     "SMALLCAP250": "ind_niftysmallcap250list",
     "TOTALMARKET": "ind_niftytotalmarket_list",
 }
+# Rationale: BSE's server rejects requests lacking an official referer header.
 BSE_HEADERS = {"Referer": "https://www.bseindia.com/"}
 
+# Tradable equity series on NSE:
+#   EQ: Normal rolling settlement equities.
+#   BE: Book Entry / Trade-for-Trade (delivery only, no intraday netting).
+#   BZ: Non-compliant / surveillance category (trade-for-trade).
 NSE_SERIES = {"EQ", "BE", "BZ"}
+
+# Regex pattern for identifying ETF / mutual fund / trust keywords in names.
+# Rationale: Filter out exchange-traded funds, gold bees, REITs and InvITs
+# so the universe contains only operating corporate equities.
 FUND_NAME = re.compile(r"\bETF\b|\bBEES\b|MUTUAL FUND|\bFUND\b.*\bGR(OWTH)?\b|INVIT|\bREIT\b", re.I)
+
+# Small & Medium Enterprise (SME) series (excluded by default unless --sme is requested).
 NSE_SME = {"SM", "ST"}
+
+# Allowed BSE trading groups:
+#   A (large-cap liquid), B (mid/small-cap liquid), T (trade-to-trade),
+#   X/XT/Z/ZP/P/R (surveillance, small-cap equity).
+#   Excludes F (fixed income / debt), G (government securities), E/IF (mutual funds).
 BSE_GROUPS = {"A", "B", "T", "X", "XT", "Z", "ZP", "P", "R"}
 BSE_SME = {"M", "MT", "MS", "TS"}
 
 
 def _rows(text):
+    """Parse CSV text into a list of row dicts with stripped whitespace from headers and values.
+    
+    Rationale:
+    NSE's EQUITY_L.csv notoriously contains leading spaces in column names like ' SERIES'.
+    Stripping headers and fields guarantees dictionary lookups like row['SERIES'] work reliably.
+    """
     rdr = csv.reader(io.StringIO(text))
     try:
         head = [h.strip() for h in next(rdr)]
@@ -71,6 +97,7 @@ def _rows(text):
 
 
 def _f(x):
+    """Safely convert text number to float, defaulting to 0.0 on missing/corrupt values."""
     try:
         return float(x)
     except (TypeError, ValueError):
@@ -78,12 +105,26 @@ def _f(x):
 
 
 def _decode(body):
+    """Decode raw bytes into UTF-8 text with BOM stripping.
+    
+    Rationale:
+    NSE and BSE CSV files often include a UTF-8 Byte Order Mark (BOM: \xef\xbb\xbf).
+    'utf-8-sig' automatically strips the BOM so the first column name is not mangled.
+    """
     return body.decode("utf-8-sig", errors="replace")
 
 
 def latest_bhavcopy(client, exchange, today, max_back=10, log=print):
-    """Step back from `today` until the exchange's bhavcopy exists.
-    Returns (date, rows)."""
+    """Find and download the most recent available daily Bhavcopy file.
+
+    Returns:
+        (date, rows): Calendar date of the Bhavcopy and list of row dicts.
+
+    Rationale:
+    Exchanges publish the current day's Bhavcopy around 18:00-19:00 IST.
+    During market hours, on weekends, or on exchange holidays, today's file does not exist yet.
+    Stepping back day-by-day (skipping weekends) finds the latest completed session's data.
+    """
     d = today
     for _ in range(max_back):
         if d.weekday() < 5:
@@ -94,9 +135,11 @@ def latest_bhavcopy(client, exchange, today, max_back=10, log=print):
                 else:
                     body = client.get(BSE_BHAV % stamp, headers=BSE_HEADERS)
                 rows = _rows(_decode(body))
+                # Validate that the file is an actual Bhavcopy by checking for ticker symbol header
                 if rows and "TckrSymb" in rows[0]:
                     return d, rows
             except net.FetchError as e:
+                # 404 or 403 means the file is not yet generated for that date; continue stepping back
                 if e.status not in (404, 403, None):
                     raise
         d -= datetime.timedelta(days=1)
@@ -105,8 +148,22 @@ def latest_bhavcopy(client, exchange, today, max_back=10, log=print):
 
 def build(nse_rows, bse_rows, equity_l_rows=None, index_rows=None, include_sme=False,
           exchanges=("NSE", "BSE")):
-    """Pure function: parsed source rows -> list of symbol dicts. Testable offline.
-    index_rows: {"NIFTY50": [rows...], ...}"""
+    """Pure compilation function: builds deduplicated equity universe from parsed raw rows.
+
+    Rationale & Core Rules:
+    1. Bhavcopy as Primary Truth: Only equities that actually traded in the latest session
+       are included. EQUITY_L alone contains suspended/delisted names Yahoo cannot quote.
+    2. ISIN Deduplication: Many large companies (e.g. RELIANCE, TCS) trade on both NSE and BSE.
+       Using the unique International Securities Identification Number (ISIN), dual-listed
+       stocks are represented once under NSE with 'also_bse=True', avoiding double-counting.
+    3. ETF Exclusion: In India, all mutual funds and ETFs have ISINs beginning with 'INF'.
+       Filtering by 'isin.startswith("INF")' reliably drops index ETFs and gold funds that
+       trade under series EQ.
+    4. Series & Instrument Filtering: FinInstrmTp must be 'STK' (stocks). Debt, preference shares,
+       and non-equity warrants are excluded.
+    5. Prioritized by Turnover: Output list is sorted descending by daily traded turnover,
+       ensuring high-liquidity stocks are polled first by the live engine.
+    """
     names = {}
     for r in equity_l_rows or []:
         sym = r.get("SYMBOL")
@@ -127,13 +184,16 @@ def build(nse_rows, bse_rows, equity_l_rows=None, index_rows=None, include_sme=F
     bse_groups = BSE_GROUPS | (BSE_SME if include_sme else set())
     out, by_isin = [], {}
 
+    # Process National Stock Exchange equities
     if "NSE" in exchanges:
         for r in nse_rows:
             if r.get("FinInstrmTp") != "STK" or r.get("SctySrs") not in nse_series:
                 continue
             sym, isin = r.get("TckrSymb", ""), r.get("ISIN", "")
+            # Must appear in the official equity master to ensure it is not an ETF
             if not sym or (names and sym not in names and r["SctySrs"] not in NSE_SME):
-                continue          # not in the equity master: ETF / fund unit
+                continue
+            # Drop mutual funds and ETFs by ISIN
             if isin.startswith("INF"):
                 continue
             row = {
@@ -149,7 +209,8 @@ def build(nse_rows, bse_rows, equity_l_rows=None, index_rows=None, include_sme=F
                 "last_close": _f(r.get("ClsPric")),
                 "also_bse": False,
             }
-            if isin and isin in by_isin:   # same ISIN twice on NSE (EQ + BE): keep the liquid one
+            # If the same ISIN trades in both EQ and BE series on NSE, keep the more liquid one
+            if isin and isin in by_isin:
                 if row["turnover"] <= by_isin[isin]["turnover"]:
                     continue
                 out.remove(by_isin[isin])
@@ -157,14 +218,17 @@ def build(nse_rows, bse_rows, equity_l_rows=None, index_rows=None, include_sme=F
             if isin:
                 by_isin[isin] = row
 
+    # Process Bombay Stock Exchange equities (for BSE-only listed companies)
     for r in bse_rows if "BSE" in exchanges else []:
         if r.get("FinInstrmTp") != "STK" or r.get("SctySrs") not in bse_groups:
             continue
+        # Exclude mutual fund / ETF units
         if FUND_NAME.search(r.get("FinInstrmNm") or "") or r.get("ISIN", "").startswith("INF"):
             continue
         sym, isin = r.get("TckrSymb", ""), r.get("ISIN", "")
         if not sym:
             continue
+        # If already added via NSE, simply flag that it also trades on BSE
         if isin and isin in by_isin:
             by_isin[isin]["also_bse"] = True
             continue
@@ -185,8 +249,8 @@ def build(nse_rows, bse_rows, equity_l_rows=None, index_rows=None, include_sme=F
         if isin:
             by_isin[isin] = row
 
-    # Yahoo symbols must be unique: an NSE ticker and a BSE ticker never share a
-    # suffix, but guard anyway so a duplicate can never shadow a row.
+    # Sort all symbols descending by daily turnover (most-traded first).
+    # Guarantees unique Yahoo symbols so duplicate ticker bugs cannot shadow rows.
     seen, uniq = set(), []
     for row in sorted(out, key=lambda x: -x["turnover"]):
         if row["ysym"] not in seen:
@@ -196,6 +260,14 @@ def build(nse_rows, bse_rows, equity_l_rows=None, index_rows=None, include_sme=F
 
 
 def fetch_and_build(client, include_sme=False, exchanges=("NSE", "BSE"), log=print, now=None):
+    """Fetch external exchange CSV files and compile universe.json document.
+    
+    Rationale:
+    Orchestrates downloading latest Bhavcopies, EQUITY_L, and NIFTY index CSVs.
+    If an optional index file or EQUITY_L fails (e.g. temporary NSE server glitch),
+    it records a non-fatal warning and falls back to Bhavcopy names, ensuring
+    universe construction does not halt.
+    """
     today = (now or now_utc()).astimezone(IST).date()
     warnings = []
     nse_date, nse_rows = latest_bhavcopy(client, "NSE", today, log=log) if "NSE" in exchanges else (None, [])

@@ -4,128 +4,142 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NSE/BSE Screener</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 12 5 7l3 3 6-7' fill='none' stroke='%232f81f7' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236d7cff'/%3E%3Cstop offset='1' stop-color='%239a6cff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cpath d='M7 21l6-7 5 5 7-9' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/vendor/theme.css">
+<script>try{var t=JSON.parse(localStorage.getItem("scr.theme"));document.documentElement.dataset.theme=t||(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark")}catch(e){}</script>
 <style>
-:root {
-  --bg: #0f1117; --panel: #161a23; --panel2: #1c2130; --line: #262c3b; --text: #d6dae3;
-  --muted: #8790a3; --accent: #3d8bfd; --up: #22ab94; --down: #f23645; --warn: #f5a524;
-  --flash-up: rgba(34,171,148,.28); --flash-down: rgba(242,54,69,.28); --row-hover: #1e2433;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-:root[data-theme="light"] {
-  --bg: #f6f7f9; --panel: #ffffff; --panel2: #f0f2f5; --line: #e1e4ea; --text: #131722;
-  --muted: #6a7187; --accent: #2962ff; --up: #089981; --down: #e0293b; --warn: #b7791f;
-  --flash-up: rgba(8,153,129,.18); --flash-down: rgba(224,41,59,.18); --row-hover: #f1f4fa;
-}
-* { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-button, input, select, textarea { font: inherit; color: inherit; }
+html, body { height: 100%; }
 .app { display: flex; flex-direction: column; height: 100%; }
-header { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: var(--panel);
-  border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-header h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: .2px; }
-.pill { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; text-transform: uppercase;
-  background: var(--panel2); color: var(--muted); border: 1px solid var(--line); }
-.pill.open { color: var(--up); border-color: var(--up); }
-.pill.warn { color: var(--warn); border-color: var(--warn); }
-.stats { color: var(--muted); font-size: 12px; display: flex; gap: 14px; flex-wrap: wrap; }
-.stats b { color: var(--text); font-weight: 600; }
-.spacer { flex: 1; }
-.nav a { color: var(--muted); text-decoration: none; padding: 4px 10px; border-radius: 6px; }
-.nav a.on { color: var(--text); background: var(--panel2); }
-.nav a:hover { color: var(--text); }
-.conn { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
-.conn.live { background: var(--up); box-shadow: 0 0 6px var(--up); }
-.conn.bad { background: var(--down); }
-.bar { display: flex; gap: 8px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
-  align-items: flex-start; flex-wrap: wrap; }
-#filter { flex: 1 1 420px; min-height: 34px; max-height: 120px; resize: vertical; padding: 7px 10px;
-  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font-family: var(--mono); font-size: 12.5px; }
-#filter:focus { outline: none; border-color: var(--accent); }
-.btn { padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel2);
-  cursor: pointer; white-space: nowrap; }
-.btn:hover { border-color: var(--accent); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn.on { border-color: var(--up); color: var(--up); }
-select.btn { padding: 6px 8px; }
-.err { color: var(--down); padding: 0 16px 8px; background: var(--panel); font-family: var(--mono); font-size: 12px;
-  border-bottom: 1px solid var(--line); }
+
+/* command bar */
+.command { display: flex; gap: 8px; padding: 14px 18px 12px; align-items: flex-start; flex-wrap: wrap; }
+.qfield { flex: 1 1 420px; position: relative; display: flex; min-width: 0; }
+.qfield > svg.ic { position: absolute; left: 12px; top: 9px; color: var(--accent); pointer-events: none; }
+#filter { flex: 1; min-height: 34px; max-height: 140px; resize: vertical; padding: 8px 12px 8px 34px; line-height: 1.4;
+  font-family: var(--mono); font-size: 12.5px; border-radius: var(--r); background: var(--panel); box-shadow: var(--shadow-sm); }
+.command .btn, .command select { height: 34px; }
+.command select.btn { padding: 0 28px 0 12px; background-color: var(--panel2); }
+#presets { width: 150px; flex: none; }
+.tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.help { margin: 0 18px 12px; padding: 12px 14px; font-size: 12px; color: var(--muted); line-height: 1.9;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); }
+.err { margin: 0 18px 12px; padding: 9px 12px; border-radius: var(--r); font-family: var(--mono); font-size: 12px;
+  color: var(--down); background: var(--down-soft); border: 1px solid color-mix(in srgb, var(--down) 30%, transparent); }
 .err:empty { display: none; }
-.warnbar { color: var(--warn); padding: 6px 16px; background: var(--panel2); font-size: 12px; border-bottom: 1px solid var(--line); }
+.warnbar { margin: 0 18px 12px; padding: 9px 12px; border-radius: var(--r); font-size: 12px;
+  color: var(--warn); background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 28%, transparent); }
 .warnbar:empty { display: none; }
-.main { flex: 1; display: flex; min-height: 0; }
-.tablewrap { flex: 1; overflow: auto; }
-table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
-th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; text-align: right; }
-th { position: sticky; top: 0; background: var(--panel); z-index: 1; font-weight: 600; color: var(--muted);
-  font-size: 11.5px; cursor: pointer; user-select: none; }
+
+/* stats strip */
+.stats { display: flex; gap: 6px; flex-wrap: wrap; color: var(--muted); font-size: 12px; padding: 0 18px 12px; }
+.stats span { display: inline-flex; align-items: baseline; gap: 5px; padding: 4px 10px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--line); white-space: nowrap; }
+.stats span:first-child { color: var(--text-2); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); background: var(--accent-soft); }
+.stats b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* table + detail */
+.main { flex: 1; display: flex; min-height: 0; gap: 12px; padding: 0 18px 12px; }
+.tablewrap { flex: 1; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md); min-width: 0; }
+th { cursor: pointer; transition: color .15s var(--ease); }
 th:hover { color: var(--text); }
-th.sorted { color: var(--accent); }
-th.text, td.text { text-align: left; }
-tbody tr { cursor: pointer; }
-tbody tr:hover td { background: var(--row-hover); }
-tbody tr.sel td { background: var(--panel2); }
+th .arr { display: inline-block; margin-left: 4px; font-size: 9px; }
+th.text, td.text, td.sym { text-align: left; }
+th:first-child, td:first-child { padding-left: 16px; }
+td { font-family: var(--mono); font-size: 12px; letter-spacing: -.01em; color: var(--text-2); }
+td.text { font-family: var(--sans); font-size: 12.5px; color: var(--muted); max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+td.sym { font-family: var(--sans); font-weight: 600; font-size: 12.5px; color: var(--text); letter-spacing: 0; }
 td.up { color: var(--up); } td.down { color: var(--down); }
-td.sym { font-weight: 650; text-align: left; }
-.ex { font-size: 9.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; margin-left: 6px;
-  font-weight: 500; vertical-align: 1px; }
-.badge { font-size: 10px; margin-left: 4px; color: var(--warn); }
+tbody tr { cursor: pointer; }
+tbody tr.sel td { background: var(--sel); }
+tbody tr.sel td:first-child, tr.new td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.ex { display: inline-block; font: 600 9px/1 var(--sans); letter-spacing: .06em; color: var(--muted); border: 1px solid var(--line);
+  border-radius: 4px; padding: 2px 4px; margin-left: 7px; vertical-align: 1px; }
+.badge { display: inline-flex; align-items: center; margin-left: 6px; font: 600 9.5px/1 var(--sans); color: var(--warn);
+  vertical-align: 0; text-transform: uppercase; letter-spacing: .04em; }
+.badge svg.ic { width: 12px; height: 12px; vertical-align: 0; }
 td.fu { animation: fu 1.2s ease-out; } td.fd { animation: fd 1.2s ease-out; }
 @keyframes fu { from { background: var(--flash-up); } to { background: transparent; } }
 @keyframes fd { from { background: var(--flash-down); } to { background: transparent; } }
-tr.new td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
-.empty { padding: 40px; text-align: center; color: var(--muted); }
-aside { width: 360px; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 14px 16px; }
-aside[hidden] { display: none; }
-aside h2 { margin: 0 0 2px; font-size: 18px; }
-aside .sub { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
-aside .big { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
-aside dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; margin: 12px 0; font-size: 12.5px; }
-aside dt { color: var(--muted); } aside dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
-aside svg { width: 100%; height: 180px; display: block; margin-top: 8px; }
-.pop { position: absolute; z-index: 10; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-  padding: 12px; max-height: 70vh; overflow: auto; width: min(720px, calc(100vw - 32px)); box-shadow: 0 8px 30px rgba(0,0,0,.35);
-  columns: 3 200px; }
-.pop[hidden] { display: none; }
-.pop .grp { break-inside: avoid; margin-bottom: 10px; }
-.pop .grp b { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
-.pop label { display: block; font-size: 12.5px; padding: 1px 0; cursor: pointer; }
-.help { color: var(--muted); font-size: 11.5px; padding: 0 16px 8px; background: var(--panel); border-bottom: 1px solid var(--line); }
-.help code { font-family: var(--mono); color: var(--text); background: var(--panel2); padding: 0 4px; border-radius: 3px; }
-#toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; z-index: 20; }
-.toast { background: var(--panel2); border: 1px solid var(--accent); border-radius: 6px; padding: 8px 12px; font-size: 12.5px;
-  max-width: 320px; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
-footer { padding: 4px 16px; color: var(--muted); font-size: 11px; border-top: 1px solid var(--line); background: var(--panel);
-  display: flex; gap: 12px; flex-wrap: wrap; }
+.empty { padding: 64px 20px; text-align: center; color: var(--muted); }
+.empty svg.ic { width: 28px; height: 28px; color: var(--line-strong); display: block; margin: 0 auto 10px; }
+.empty b { display: block; color: var(--text); font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+
+aside { width: 380px; flex: none; overflow: auto; padding: 18px 20px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-md); animation: slide-in .25s var(--ease); }
+@keyframes slide-in { from { opacity: 0; transform: translateX(10px); } }
+aside .close { float: right; margin: -4px -6px 0 0; }
+aside h2 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -.02em; display: flex; align-items: center; }
+aside .sub { color: var(--muted); font-size: 12px; margin: 3px 0 12px; line-height: 1.5; }
+aside .big { font-size: 30px; font-weight: 600; letter-spacing: -.03em; display: flex; align-items: baseline; gap: 10px; margin-top: 4px; }
+aside .big span { font-size: 13px !important; font-weight: 600; padding: 3px 8px; border-radius: 999px; letter-spacing: 0; }
+aside .big span.up { background: var(--up-soft); } aside .big span.down { background: var(--down-soft); }
+aside .chartbox { margin: 12px 0 4px; padding: 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--field); }
+aside svg.candles { width: 100%; height: 180px; display: block; }
+aside dl { display: grid; grid-template-columns: 1fr auto; margin: 14px 0; font-size: 12.5px; }
+aside dt, aside dd { padding: 6px 0; border-bottom: 1px solid var(--line); }
+aside dt { color: var(--muted); }
+aside dd { margin: 0; text-align: right; font-family: var(--mono); font-size: 12px; color: var(--text-2); }
+aside dd.up { color: var(--up); } aside dd.down { color: var(--down); }
+aside .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+aside .chips span { font-size: 11px; padding: 3px 8px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); color: var(--text-2); }
+
+/* columns popover */
+.pop { position: absolute; z-index: 30; background: var(--glass); backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%); border: 1px solid var(--line-strong); border-radius: var(--r-lg);
+  padding: 14px; max-height: 70vh; overflow: auto; width: min(760px, calc(100vw - 32px)); box-shadow: var(--shadow-lg);
+  columns: 3 200px; column-gap: 16px; }
+.pop .grp { break-inside: avoid; margin-bottom: 12px; }
+.pop .grp b { display: block; font-size: 10.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin: 0 0 4px 6px; }
+.pop label { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.pop label:hover { background: var(--panel2); }
+.pop label span { margin-left: auto; font-family: var(--mono); font-size: 10.5px !important; }
+
+#toasts { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+#toasts .toast { max-width: 340px; border-left: 3px solid var(--accent); }
+footer { display: flex; gap: 12px; flex-wrap: wrap; padding: 8px 18px; color: var(--muted); font-size: 11px;
+  border-top: 1px solid var(--line); background: var(--glass); }
+footer #foot { font-family: var(--mono); font-size: 10.5px; }
 @media (max-width: 760px) {
-  aside { position: fixed; inset: 0; width: auto; z-index: 15; }
-  header, .bar { padding-left: 16px; padding-right: 16px; }
+  .command, .main { padding-left: 12px; padding-right: 12px; }
+  .stats { padding: 0 12px 10px; }
+  aside { position: fixed; inset: 8px; width: auto; z-index: 45; }
 }
 </style>
 </head>
 <body>
 <div class="app">
-  <header>
-    <h1>NSE · BSE</h1>
-    <nav class="nav"><a href="/" class="on">Screener</a><a href="/backtest" id="btLink" title="Backtest the current filter">Backtest</a><a href="/studio">Studio</a></nav>
-    <span id="market" class="pill">…</span>
-    <span class="conn" id="conn" title="stream"></span>
-    <div class="stats" id="stats"></div>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="NSE BSE screener home"><span class="mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l5-6 4 4 7-9"/></svg></span><span class="word">NSE<span> · </span>BSE</span></a>
+    <nav class="tabs" aria-label="Sections">
+      <a href="/" class="on" aria-current="page"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M7 12h10M10 18h4"/></svg><span class="lbl">Screener</span></a>
+      <a href="/backtest" id="btLink" title="Backtest the current filter"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg><span class="lbl">Backtest</span></a>
+      <a href="/studio"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg><span class="lbl">Studio</span></a>
+    </nav>
+    <span class="vsep"></span>
+    <span class="status" id="mkt" title="Market session"><span class="conn" id="conn" title="stream"></span><span id="market">…</span></span>
     <div class="spacer"></div>
-    <button class="btn" id="theme" title="Toggle theme">◐</button>
+    <button class="btn icon" id="theme" title="Toggle theme" aria-label="Toggle light or dark theme"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg></button>
   </header>
-  <div class="bar">
-    <select class="btn" id="presets"><option value="">Presets…</option></select>
-    <textarea id="filter" rows="1" spellcheck="false" placeholder='e.g.  rsi14 < 30 and price > sma200 and turnover > 5cr'></textarea>
-    <button class="btn primary" id="apply">Apply ⏎</button>
-    <button class="btn" id="colsBtn">Columns</button>
-    <select class="btn" id="limit" title="Rows">
-      <option>50</option><option selected>200</option><option>500</option><option>2000</option>
-    </select>
-    <button class="btn" id="alerts" title="Notify when a stock newly matches">🔔 Alerts off</button>
-    <button class="btn" id="helpBtn">?</button>
-  </div>
+  <section class="command">
+    <select class="btn" id="presets" aria-label="Presets"><option value="">Presets</option></select>
+    <div class="qfield">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 3H2l8 9.46V19l4 2v-8.54z"/></svg>
+      <textarea id="filter" rows="1" spellcheck="false" aria-label="Filter" placeholder='rsi14 < 30 and price > sma200 and turnover > 5cr'></textarea>
+    </div>
+    <button class="btn primary" id="apply">Apply <kbd>⏎</kbd></button>
+    <div class="tools">
+      <button class="btn" id="colsBtn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/></svg>Columns</button>
+      <select class="btn" id="limit" title="Rows" aria-label="Rows">
+        <option>50</option><option selected>200</option><option>500</option><option>2000</option>
+      </select>
+      <button class="btn" id="alerts" title="Notify when a stock newly matches">Alerts off</button>
+      <button class="btn icon" id="helpBtn" title="Filter language help" aria-label="Filter language help"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
+    </div>
+  </section>
   <div class="help" id="help" hidden>
     Fields: click <b>Columns</b> to see all. Operators: <code>and or not</code> <code>&lt; &lt;= &gt; &gt;= == !=</code>
     <code>+ - * /</code> <code>in [..]</code>, chains like <code>30 &lt; rsi14 &lt; 70</code>.
@@ -134,13 +148,14 @@ footer { padding: 4px 16px; color: var(--muted); font-size: 11px; border-top: 1p
     <code>contains(name,"bank")</code>. Text: <code>exchange == "NSE"</code>, <code>"NIFTY50" in indices</code>.
     A field without a value (too little history) never matches. Ctrl/⌘+Enter applies.
   </div>
-  <div class="err" id="err"></div>
+  <div class="err" id="err" role="alert"></div>
   <div class="warnbar" id="warn"></div>
+  <div class="stats" id="stats" aria-live="polite"></div>
   <div class="pop" id="cols" hidden></div>
   <div class="main">
     <div class="tablewrap" id="wrap">
       <table><thead><tr id="head"></tr></thead><tbody id="body"></tbody></table>
-      <div class="empty" id="empty" hidden>No stocks match this filter.</div>
+      <div class="empty" id="empty" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M8 11h6"/></svg><b>No matches</b>No stocks match this filter right now.</div>
     </div>
     <aside id="detail" hidden></aside>
   </div>
@@ -265,7 +280,8 @@ function renderHead(cols) {
     if (["ysym", "exchange", "age", "hist_ok", "note"].includes(c) && c !== state.sort) continue;
     const f = META.fields[c] || { label: c, fmt: "" };
     const th = document.createElement("th");
-    th.textContent = f.label + (state.sort === c ? (state.desc ? " ▼" : " ▲") : "");
+    th.textContent = f.label;
+    if (state.sort === c) { const a = document.createElement("span"); a.className = "arr"; a.textContent = state.desc ? "▼" : "▲"; th.append(a); }
     th.title = c;
     if (["text", "list"].includes(f.fmt) || c === "sym") th.className = "text";
     if (state.sort === c) th.classList.add("sorted");
@@ -310,7 +326,7 @@ function render(res) {
         td.innerHTML = "";
         td.append(document.createTextNode(v));
         const ex = document.createElement("span"); ex.className = "ex"; ex.textContent = r[ix.exchange]; td.append(ex);
-        if (!r[ix.hist_ok]) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "⚠"; b.title = r[ix.note] || "indicators unavailable"; td.append(b); }
+        if (!r[ix.hist_ok]) { const b = document.createElement("span"); b.className = "badge"; b.innerHTML = WARN_SVG; b.title = r[ix.note] || "indicators unavailable"; td.append(b); }
         if (open && r[ix.age] > 300) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "stale"; b.title = "last trade " + ago(Date.now() / 1000 - r[ix.age]) + " ago"; td.append(b); }
         return;
       }
@@ -343,8 +359,8 @@ function ago(t) {
 }
 function renderStatus(res) {
   const s = res.status;
-  const m = $("market"); m.textContent = s.market.replace("_", " ");
-  m.className = "pill " + (s.market === "open" ? "open" : s.calendar_warning ? "warn" : "");
+  $("market").textContent = s.market.replace("_", " ");
+  $("mkt").className = "status " + (s.market === "open" ? "open" : s.calendar_warning ? "warn" : "");
   $("stats").innerHTML =
     `<span>matched <b>${res.matched.toLocaleString("en-IN")}</b> of ${res.total.toLocaleString("en-IN")}</span>` +
     `<span>indicators <b>${s.with_indicators.toLocaleString("en-IN")}</b></span>` +
@@ -370,15 +386,15 @@ async function showDetail(y) {
   if (row.db_neckline) pick.push("db_score", "db_l1_date", "db_l2_date", "db_neckline", "db_days_since_breakout",
     "db_entry", "db_stop", "db_risk_pct", "db_target_1r", "db_target_2r", "db_target");
   const pats = Object.entries(F).filter(([k, f]) => f.fmt === "bool" && f.group === "Patterns" && row[k]).map(([k, f]) => f.label);
-  a.innerHTML = `<button class="btn" style="float:right" id="close">✕</button>
+  a.innerHTML = `<button class="btn icon close" id="close" aria-label="Close details"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     <h2>${esc(row.sym)} <span class="ex">${esc(row.exchange)}</span></h2>
     <div class="sub">${esc(row.name || "")}${row.industry ? " · " + esc(row.industry) : ""}</div>
     <div class="big" id="dprice">${fmt(row.price, "price")} <span class="${tone("change_pct", row.change_pct)}" style="font-size:14px">${fmt(row.change_pct, "pct")}</span></div>
-    <div class="sub">session ${esc(row.session)} · last trade ${ago(row.time)} ago · ${row.official_eod ? "official EOD (exchange bhavcopy)" : "Yahoo quote"}${row.note ? " · ⚠ " + esc(row.note) : ""}</div>
+    <div class="sub">session ${esc(row.session)} · last trade ${ago(row.time)} ago · ${row.official_eod ? "official EOD (exchange bhavcopy)" : "Yahoo quote"}${row.note ? " · " + esc(row.note) : ""}</div>
     ${chart(j.bars, row)}
-    ${pats.length ? `<div class="sub" style="margin-top:8px">Patterns: <b>${pats.map(esc).join(", ")}</b></div>` : ""}
+    ${pats.length ? `<div class="chips">${pats.map((p) => `<span>${esc(p)}</span>`).join("")}</div>` : ""}
     <dl>${pick.filter((k) => F[k]).map((k) => `<dt>${F[k].label}</dt><dd class="${tone(k, row[k])}">${fmt(row[k], F[k].fmt)}</dd>`).join("")}</dl>
-    <div class="sub">${(row.indices || []).map(esc).join(" · ")}</div>`;
+    ${(row.indices || []).length ? `<div class="chips">${row.indices.map((x) => `<span>${esc(x)}</span>`).join("")}</div>` : ""}`;
   $("close").onclick = () => { a.hidden = true; selected = null; for (const tr of $("body").children) tr.classList.remove("sel"); };
 }
 function refreshDetailRow(res, ix) {
@@ -386,6 +402,7 @@ function refreshDetailRow(res, ix) {
   if (!r || !el || ix.price === undefined) return;
   el.firstChild.textContent = fmt(r[ix.price], "price") + " ";
 }
+const WARN_SVG = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18v.01"/></svg>';
 function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function chart(bars, row) {
   if (!bars || bars.length < 2) return '<div class="sub">No daily history yet.</div>';
@@ -399,7 +416,7 @@ function chart(bars, row) {
   const hi = Math.max(...data.map((b) => b[2]), ...lv), lo = Math.min(...data.map((b) => b[3]), ...lv);
   const y = (v) => P + (H - 2 * P) * (1 - (v - lo) / (hi - lo || 1));
   const w = (W - 2 * P) / data.length;
-  let s = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Daily candles">`;
+  let s = `<div class="chartbox"><svg class="candles" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Daily candles">`;
   data.forEach((b, i) => {
     const x = P + i * w + w / 2, up = b[4] >= b[1], c = up ? "var(--up)" : "var(--down)";
     s += `<line x1="${x}" x2="${x}" y1="${y(b[2])}" y2="${y(b[3])}" stroke="${c}" stroke-width="1"/>`;
@@ -415,12 +432,13 @@ function chart(bars, row) {
       if (i >= 0) s += `<circle cx="${P + i * w + w / 2}" cy="${y(data[i][3]) + 5}" r="3" fill="var(--warn)"><title>trough ${d}</title></circle>`;
     }
   }
-  return s + "</svg>";
+  return s + "</svg></div>";
 }
 
 // ---------- alerts ----------
 let alertsOn = store.get("alerts", false);
-function setAlertsBtn() { $("alerts").textContent = alertsOn ? "🔔 Alerts on" : "🔔 Alerts off"; $("alerts").classList.toggle("on", alertsOn); }
+const BELL_SVG = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+function setAlertsBtn() { $("alerts").innerHTML = BELL_SVG + (alertsOn ? "Alerts on" : "Alerts off"); $("alerts").classList.toggle("on", alertsOn); }
 function notify(syms) {
   const msg = "New match: " + syms.join(", ");
   const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;

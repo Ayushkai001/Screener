@@ -4,114 +4,118 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Strategy Backtester</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 12 5 7l3 3 6-7' fill='none' stroke='%232f81f7' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236d7cff'/%3E%3Cstop offset='1' stop-color='%239a6cff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cpath d='M7 21l6-7 5 5 7-9' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/vendor/theme.css">
+<script>try{var t=JSON.parse(localStorage.getItem("scr.theme"));document.documentElement.dataset.theme=t||(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark")}catch(e){}</script>
 <style>
-:root {
-  --bg: #0f1117; --panel: #161a23; --panel2: #1c2130; --line: #262c3b; --text: #d6dae3;
-  --muted: #8790a3; --accent: #3d8bfd; --up: #22ab94; --down: #f23645; --warn: #f5a524;
-  --s1: #3987e5; --s2: #d95926; --grid: #232938; --row-hover: #1e2433;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-:root[data-theme="light"] {
-  --bg: #f6f7f9; --panel: #ffffff; --panel2: #f0f2f5; --line: #e1e4ea; --text: #131722;
-  --muted: #6a7187; --accent: #2962ff; --up: #089981; --down: #e0293b; --warn: #b7791f;
-  --s1: #2a78d6; --s2: #eb6834; --grid: #eceef2; --row-hover: #f1f4fa;
-}
-* { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--text);
-  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-button, input, select, textarea { font: inherit; color: inherit; }
-header { display: flex; align-items: center; gap: 14px; padding: 8px 16px; background: var(--panel);
-  border-bottom: 1px solid var(--line); flex-wrap: wrap; position: sticky; top: 0; z-index: 5; }
-header h1 { font-size: 15px; margin: 0; font-weight: 650; }
-nav a { color: var(--muted); text-decoration: none; padding: 4px 10px; border-radius: 6px; }
-nav a.on { color: var(--text); background: var(--panel2); }
-nav a:hover { color: var(--text); }
-.spacer { flex: 1; }
-.btn { padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel2);
-  cursor: pointer; white-space: nowrap; }
-.btn:hover { border-color: var(--accent); }
-a.btn { color: var(--text); text-decoration: none; display: inline-block; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-.btn:disabled { opacity: .55; cursor: default; }
-.layout { display: grid; grid-template-columns: 380px minmax(0, 1fr); min-height: calc(100vh - 49px); }
-form { background: var(--panel); border-right: 1px solid var(--line); padding: 14px 16px 24px; }
-fieldset { border: 0; border-top: 1px solid var(--line); margin: 0; padding: 12px 0 4px; }
-fieldset:first-of-type { border-top: 0; padding-top: 0; }
-legend { font-size: 11px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; padding: 0; margin-bottom: 6px; }
-label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 3px; }
-input[type=text], input[type=number], input[type=date], select, textarea {
-  width: 100%; padding: 6px 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
-textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; min-height: 64px; }
-input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
-.row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-.pair { display: grid; grid-template-columns: 110px 1fr; gap: 6px; }
-.check { display: flex; gap: 14px; margin-top: 4px; }
-.check label { display: flex; align-items: center; gap: 5px; margin: 0; color: var(--text); font-size: 12.5px; }
-.hint { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
-.hint code, .note code { font-family: var(--mono); background: var(--panel2); padding: 0 4px; border-radius: 3px; color: var(--text); }
-details summary { cursor: pointer; color: var(--muted); font-size: 12px; margin-top: 8px; }
-.runbar { position: sticky; bottom: 0; background: var(--panel); padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line); }
-.progress { height: 4px; background: var(--panel2); border-radius: 2px; overflow: hidden; margin-top: 10px; }
-.progress div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
-.err { color: var(--down); font-family: var(--mono); font-size: 12px; margin-top: 8px; white-space: pre-wrap; }
+.layout { display: grid; grid-template-columns: 384px minmax(0, 1fr); min-height: calc(100vh - var(--hdr)); }
+form { background: var(--panel); border-right: 1px solid var(--line); padding: 18px 20px 0; counter-reset: step; }
+fieldset { border: 0; border-top: 1px solid var(--line); margin: 0; padding: 18px 0 14px; min-width: 0; }
+fieldset:first-of-type { border-top: 0; padding-top: 2px; }
+legend { display: flex; align-items: center; gap: 9px; font-size: 11px; font-weight: 600; color: var(--text-2);
+  text-transform: uppercase; letter-spacing: .08em; padding: 0; margin-bottom: 4px; float: left; width: 100%; }
+legend::before { counter-increment: step; content: counter(step); display: inline-grid; place-items: center; width: 20px; height: 20px;
+  border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-size: 10.5px; letter-spacing: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+legend + * { clear: both; }
+label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 5px; font-weight: 500; }
+input[type=text], input[type=number], input[type=date], select, textarea { width: 100%; }
+textarea { padding: 9px 11px; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; resize: vertical; min-height: 76px; }
+#preset { margin-top: 10px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.row > *, .row3 > * { min-width: 0; }
+.pair { display: grid; grid-template-columns: 116px 1fr; gap: 8px; }
+.check { display: flex; gap: 8px; margin-top: 12px; }
+.check label { display: inline-flex; align-items: center; gap: 7px; margin: 0; height: 32px; padding: 0 12px; border-radius: var(--r-sm);
+  border: 1px solid var(--line); background: var(--field); color: var(--text); font-size: 12.5px; cursor: pointer; }
+.check label:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
+details { margin-top: 12px; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 500; list-style: none; display: flex; align-items: center; gap: 6px; }
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg); transition: transform .16s var(--ease); }
+details[open] summary::before { transform: rotate(45deg); }
+details summary:hover { color: var(--text); }
+.runbar { position: sticky; bottom: 0; margin: 4px -20px 0; padding: 14px 20px 18px; background: var(--glass);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--line); }
+.runbar .btn { height: 40px; font-size: 13.5px; }
+.err { color: var(--down); font-family: var(--mono); font-size: 12px; margin-top: 10px; white-space: pre-wrap; padding: 9px 11px;
+  border-radius: var(--r-sm); background: var(--down-soft); border: 1px solid color-mix(in srgb, var(--down) 30%, transparent); }
 .err:empty { display: none; }
-main { padding: 16px 20px 40px; min-width: 0; }
-.placeholder { color: var(--muted); max-width: 640px; line-height: 1.6; }
-.placeholder h2 { color: var(--text); font-size: 18px; margin: 4px 0 8px; }
-.notes { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 6px;
-  padding: 8px 12px; margin-bottom: 14px; font-size: 12.5px; }
+
+main { padding: 24px 28px 48px; min-width: 0; }
+.placeholder { position: relative; overflow: hidden; padding: 36px 36px 32px; margin-bottom: 18px; border-radius: 18px;
+  border: 1px solid var(--line); background:
+  radial-gradient(600px 240px at 0% 0%, var(--accent-soft), transparent 70%),
+  radial-gradient(500px 260px at 100% 120%, rgba(154,108,255,.08), transparent 70%), var(--panel);
+  box-shadow: var(--shadow-md); color: var(--muted); line-height: 1.65; }
+.placeholder .eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--accent); }
+.placeholder h2 { color: var(--text); font-size: 26px; font-weight: 650; letter-spacing: -.03em; line-height: 1.2; margin: 10px 0 10px; max-width: 560px; }
+.placeholder p { max-width: 620px; margin: 0 0 18px; }
+.placeholder ul { list-style: none; padding: 0; margin: 0 0 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.placeholder li { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: var(--r); background: var(--field);
+  border: 1px solid var(--line); font-size: 12.5px; color: var(--text-2); }
+.placeholder li svg.ic { color: var(--accent); margin-top: 2px; }
+.placeholder .tip2 { font-size: 12px; }
+.placeholder code { font-size: 11.5px; background: var(--panel2); border: 1px solid var(--line); padding: 1px 6px; border-radius: 5px; color: var(--text-2); }
+
+.notes { margin-bottom: 16px; }
 .notes div { padding: 2px 0; }
-.title { font-family: var(--mono); font-size: 12.5px; color: var(--muted); margin-bottom: 12px; word-break: break-word; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
-.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-.tile .k { color: var(--muted); font-size: 11.5px; }
-.tile .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
-.tile .s { color: var(--muted); font-size: 11.5px; margin-top: 2px; font-variant-numeric: tabular-nums; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; }
-.card h3 { margin: 0 0 2px; font-size: 13.5px; }
-.card .sub { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
-.legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 4px; flex-wrap: wrap; }
-.legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 6px; }
+.title { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 16px; word-break: break-word; line-height: 1.6;
+  padding: 10px 14px; border-radius: var(--r); border: 1px dashed var(--line-strong); background: var(--panel); }
+.card { padding: 18px 20px; margin-bottom: 18px; }
+.card h3 { margin: 0 0 3px; font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; }
+.card .sub { color: var(--muted); font-size: 12px; margin-bottom: 12px; line-height: 1.5; }
+.legend { display: flex; gap: 18px; font-size: 12px; color: var(--text-2); margin-bottom: 6px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 16px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 7px; }
 .legend i.dash { background: repeating-linear-gradient(90deg, var(--s2) 0 5px, transparent 5px 8px); }
 .chart { position: relative; }
 .chart svg { display: block; width: 100%; }
-.tip { position: absolute; pointer-events: none; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px;
-  padding: 6px 9px; font-size: 12px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.25); font-variant-numeric: tabular-nums; }
-.tip[hidden] { display: none; }
+.chart text { font-family: var(--mono); }
+.tip { position: absolute; pointer-events: none; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--line-strong); border-radius: 10px; padding: 8px 11px; font-size: 12px; white-space: nowrap; line-height: 1.6;
+  box-shadow: var(--shadow-lg); font-variant-numeric: tabular-nums; }
 .tip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; }
 .grid2 .card { margin-bottom: 0; }
-table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
-th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
-th { color: var(--muted); font-weight: 600; font-size: 11.5px; position: sticky; top: 0; background: var(--panel); cursor: pointer; user-select: none; }
-th.sorted { color: var(--accent); }
+th { cursor: pointer; }
 th.text, td.text { text-align: left; }
-tbody tr:hover td { background: var(--row-hover); }
+td { font-family: var(--mono); font-size: 12px; letter-spacing: -.01em; color: var(--text-2); height: 32px; }
+td.text { font-family: var(--sans); font-size: 12.5px; }
 td.up { color: var(--up); } td.down { color: var(--down); }
-.tablewrap { max-height: 520px; overflow: auto; }
-.toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-.seg button { border: 0; background: transparent; padding: 5px 10px; cursor: pointer; color: var(--muted); }
-.seg button.on { background: var(--panel2); color: var(--text); }
-.runs td { cursor: pointer; }
-.runs td.rule { font-family: var(--mono); font-size: 12px; max-width: 360px; overflow: hidden; text-overflow: ellipsis; text-align: left; }
-.foot { color: var(--muted); font-size: 11.5px; margin-top: 20px; }
+.tablewrap { max-height: 520px; overflow: auto; margin: 0 -20px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.card > .tablewrap:last-child { margin-bottom: -18px; border-bottom: 0; border-radius: 0 0 var(--r-lg) var(--r-lg); }
+.tablewrap th:first-child, .tablewrap td:first-child { padding-left: 20px; }
+.tablewrap th:last-child, .tablewrap td:last-child { padding-right: 20px; }
+.toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.runs tbody tr { cursor: pointer; }
+.runs td.rule { font-family: var(--mono); font-size: 11.5px; max-width: 380px; overflow: hidden; text-overflow: ellipsis; text-align: left; color: var(--text); }
+.foot { color: var(--muted); font-size: 11.5px; margin-top: 22px; text-align: center; }
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
   form { border-right: 0; border-bottom: 1px solid var(--line); }
   main { padding: 16px; }
   .runbar { position: static; }
+  .placeholder { padding: 24px 20px; }
+  .placeholder h2 { font-size: 21px; }
 }
 </style>
 </head>
 <body>
-<header>
-  <h1>NSE · BSE</h1>
-  <nav><a href="/">Screener</a><a href="/backtest" class="on">Backtest</a><a href="/studio">Studio</a></nav>
+<header class="topbar">
+  <a class="brand" href="/" aria-label="NSE BSE screener home"><span class="mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l5-6 4 4 7-9"/></svg></span><span class="word">NSE<span> · </span>BSE</span></a>
+  <nav class="tabs" aria-label="Sections">
+    <a href="/"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M7 12h10M10 18h4"/></svg><span class="lbl">Screener</span></a>
+    <a href="/backtest" class="on" aria-current="page"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg><span class="lbl">Backtest</span></a>
+    <a href="/studio"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg><span class="lbl">Studio</span></a>
+  </nav>
   <div class="spacer"></div>
-  <button class="btn" id="theme" title="Toggle theme" aria-label="Toggle theme">◐</button>
+  <button class="btn icon" id="theme" title="Toggle theme" aria-label="Toggle light or dark theme"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg></button>
 </header>
 <div class="layout">
 <form id="f" autocomplete="off" novalidate>
@@ -141,19 +145,19 @@ td.up { color: var(--up); } td.down { color: var(--down); }
     <legend>Exit</legend>
     <label>Stop loss</label>
     <div class="pair">
-      <select id="stop_k"><option value="atr">× ATR</option><option value="pct">%</option><option value="expr">level</option><option value="none">none</option></select>
-      <input type="text" id="stop_v" value="2">
+      <select id="stop_k" aria-label="Stop loss type"><option value="atr">× ATR</option><option value="pct">%</option><option value="expr">level</option><option value="none">none</option></select>
+      <input type="text" id="stop_v" value="2" aria-label="Stop loss value">
     </div>
     <label>Target</label>
     <div class="pair">
-      <select id="target_k"><option value="r">× risk (R)</option><option value="pct">%</option><option value="atr">× ATR</option><option value="expr">level</option><option value="none">none</option></select>
-      <input type="text" id="target_v" value="2">
+      <select id="target_k" aria-label="Target type"><option value="r">× risk (R)</option><option value="pct">%</option><option value="atr">× ATR</option><option value="expr">level</option><option value="none">none</option></select>
+      <input type="text" id="target_v" value="2" aria-label="Target value">
     </div>
     <div class="hint">Levels are expressions on the signal day: <code>low</code>, <code>db_stop</code>, <code>db_target</code>, <code>low - 0.5 * atr14</code></div>
     <label>Trailing stop (from the highest high)</label>
     <div class="pair">
-      <select id="trail_k"><option value="none">none</option><option value="atr">× ATR</option><option value="pct">%</option></select>
-      <input type="text" id="trail_v" value="3">
+      <select id="trail_k" aria-label="Trailing stop type"><option value="none">none</option><option value="atr">× ATR</option><option value="pct">%</option></select>
+      <input type="text" id="trail_v" value="3" aria-label="Trailing stop value">
     </div>
     <div class="row">
       <div><label for="max_hold">Max days in trade</label><input type="number" id="max_hold" min="0" value="20"></div>
@@ -206,14 +210,19 @@ td.up { color: var(--up); } td.down { color: var(--down); }
 </form>
 <main id="out">
   <div class="placeholder">
+    <span class="eyebrow"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>Backtest</span>
     <h2>Test a setup on 10 years of NSE &amp; BSE history</h2>
-    Write the entry rule the way you'd write a screener filter, choose how you get in and out, and run it.
-    Every rule is checked at each day's close and filled no earlier than the next session, with
-    costs, gaps through stops and untradable days accounted for.
-    <p><b>Tip:</b> first run <code>main.py bt-sync</code> once to download the 10-year history.</p>
+    <p>Write the entry rule the way you'd write a screener filter, choose how you get in and out, and run it.</p>
+    <ul>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Signals checked at each close, filled no earlier than the next session</li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>STT, stamp, exchange fees, GST and slippage on every fill</li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Gaps through stops and circuit-locked days handled honestly</li>
+    </ul>
+    <div class="tip2"><b>Tip:</b> run <code>main.py bt-sync</code> once to download the 10-year history.</div>
   </div>
   <div class="card" id="runsCard" hidden>
     <h3>Previous runs</h3>
+    <div class="sub">Click a run to reopen it with its settings.</div>
     <div class="tablewrap"><table class="runs"><thead><tr>
       <th class="text">Rule</th><th>Trades</th><th>Expectancy R</th><th>CAGR %</th><th>Max DD %</th><th class="text">Run</th>
     </tr></thead><tbody id="runs"></tbody></table></div>
@@ -252,10 +261,11 @@ function amount(s) {
   if (!m) return NaN;
   return parseFloat(m[1]) * ({ cr: 1e7, l: 1e5, k: 1e3 }[m[2]] || 1);
 }
+const WARN_SVG = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--warn)"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18v.01"/></svg>';
 const tone = (v) => v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "";
 
 // ---------- theme ----------
-document.documentElement.dataset.theme = store.get("theme", "dark");
+document.documentElement.dataset.theme = store.get("theme", matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
 $("theme").onclick = () => {
   const t = document.documentElement.dataset.theme === "light" ? "dark" : "light";
   document.documentElement.dataset.theme = t; store.set("theme", t);
@@ -373,7 +383,7 @@ function render(res) {
   let h = `<div class="title">${esc(s.entry)} · fill ${esc(s.entry_mode.replace("_", " "))} · stop ${esc(s.stop)} · target ${esc(s.target)}` +
     `${s.trail !== "none" ? " · trail " + esc(s.trail) : ""}${s.max_hold ? " · max " + s.max_hold + " days" : ""}` +
     `${s.exit ? " · exit " + esc(s.exit) : ""} · ${res.universe.toLocaleString("en-IN")} stocks · ${res.secs}s</div>`;
-  if (res.warnings && res.warnings.length) h += `<div class="notes" role="note">${res.warnings.map((w) => `<div>⚠ ${esc(w)}</div>`).join("")}</div>`;
+  if (res.warnings && res.warnings.length) h += `<div class="notes" role="note">${res.warnings.map((w) => `<div>${WARN_SVG} ${esc(w)}</div>`).join("")}</div>`;
   if (!ex.trades) {
     h += `<div class="card"><h3>No trades</h3><div class="sub">The rule never fired (or every signal was filtered). Signals: ${num(res.counters.signals || 0, 0)}, below the turnover floor: ${num(res.counters.below_min_turnover || 0, 0)}.</div></div>`;
     $("out").innerHTML = h; return;
@@ -462,7 +472,9 @@ function equityChart(res) {
   });
   const path = (pts) => pts.map((p, k) => (k ? "L" : "M") + x(idx.get(p[0])).toFixed(1) + " " + y(p[1]).toFixed(1)).join("");
   if (bAligned.length) s += `<path d="${path(bAligned)}" fill="none" stroke="var(--s2)" stroke-width="2" stroke-dasharray="6 3"/>`;
-  s += `<path d="${path(eq)}" fill="none" stroke="var(--s1)" stroke-width="2"/>`;
+  s += `<defs><linearGradient id="eqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--s1)" stop-opacity=".22"/><stop offset="1" stop-color="var(--s1)" stop-opacity="0"/></linearGradient></defs>`;
+  s += `<path d="${path(eq)}L${x(dates.length - 1).toFixed(1)} ${H - P.b}L${x(0).toFixed(1)} ${H - P.b}Z" fill="url(#eqFill)"/>`;
+  s += `<path d="${path(eq)}" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>`;
   s += `<line id="eqX" y1="${P.t}" y2="${H - P.b}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>`;
   s += `<rect x="${P.l}" y="${P.t}" width="${W - P.l - P.r}" height="${H - P.t - P.b}" fill="transparent" id="eqHit"/></svg><div class="tip" id="eqTip" hidden></div>`;
   box.innerHTML = s;
@@ -476,7 +488,8 @@ function equityChart(res) {
   for (const v of niceTicks(dlo, 0, 3)) t += `<line x1="${P.l}" x2="${W - P.r}" y1="${yd(v)}" y2="${yd(v)}" stroke="var(--grid)"/><text x="${P.l - 6}" y="${yd(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${n0.format(v)}%</text>`;
   const dpath = (pts) => pts.map((p, k) => (k ? "L" : "M") + x(idx.get(p[0])).toFixed(1) + " " + yd(p[1]).toFixed(1)).join("");
   if (db.length) t += `<path d="${dpath(db)}" fill="none" stroke="var(--s2)" stroke-width="1.5" stroke-dasharray="6 3"/>`;
-  t += `<path d="${dpath(de)}" fill="none" stroke="var(--s1)" stroke-width="2"/></svg>`;
+  t += `<path d="${dpath(de)}L${x(dates.length - 1).toFixed(1)} ${yd(0)}L${x(0).toFixed(1)} ${yd(0)}Z" fill="var(--down)" fill-opacity=".10"/>`;
+  t += `<path d="${dpath(de)}" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/></svg>`;
   dbox.innerHTML = t;
   // crosshair + tooltip
   const bmap = new Map(bAligned.map((p) => [p[0], p[1]]));
