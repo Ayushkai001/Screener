@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "name": "Bitcoin SMA 50 trend",
+  "instrument": {
+    "mode": "symbol",
+    "symbols": [
+      "BTC-USD"
+    ]
+  },
+  "timeframe": "1d",
+  "entry": {
+    "type": "group",
+    "op": "and",
+    "negate": false,
+    "items": [
+      {
+        "type": "cond",
+        "left": {
+          "kind": "ind",
+          "ind": "close",
+          "params": {}
+        },
+        "op": "crosses_above",
+        "right": {
+          "kind": "ind",
+          "ind": "sma",
+          "params": {
+            "period": 50
+          }
+        }
+      }
+    ]
+  },
+  "action": "BUY",
+  "exit": {
+    "type": "group",
+    "op": "or",
+    "negate": false,
+    "items": [
+      {
+        "type": "cond",
+        "left": {
+          "kind": "ind",
+          "ind": "close",
+          "params": {}
+        },
+        "op": "crosses_below",
+        "right": {
+          "kind": "ind",
+          "ind": "sma",
+          "params": {
+            "period": 50
+          }
+        }
+      }
+    ]
+  },
+  "execution": {
+    "entry_mode": "next_open",
+    "entry_valid_days": 1
+  },
+  "risk": {
+    "stop": {
+      "type": "pct",
+      "value": 10
+    },
+    "target": {
+      "type": "none"
+    },
+    "trail": {
+      "type": "none"
+    },
+    "max_hold": 0
+  },
+  "portfolio": {
+    "capital": 100000,
+    "sizing": "equal",
+    "risk_pct": 1,
+    "max_positions": 1,
+    "max_alloc_pct": 100
+  },
+  "costs": {
+    "profile": "flat",
+    "fee_pct": 0.1,
+    "slippage_pct": 0.05
+  },
+  "period": {
+    "start": null,
+    "end": null
+  },
+  "id": "example-btc-sma50",
+  "saved": "2026-11-12T15:19:21"
+}

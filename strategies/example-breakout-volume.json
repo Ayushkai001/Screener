@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "name": "20-day breakout on 2× volume (all NSE)",
+  "instrument": {
+    "mode": "universe",
+    "exchanges": [
+      "NSE"
+    ],
+    "min_turnover": 50000000.0
+  },
+  "timeframe": "1d",
+  "entry": {
+    "type": "group",
+    "op": "and",
+    "negate": false,
+    "items": [
+      {
+        "type": "pattern",
+        "pattern": "breakout_20d",
+        "negate": false
+      },
+      {
+        "type": "cond",
+        "left": {
+          "kind": "ind",
+          "ind": "volume",
+          "params": {}
+        },
+        "op": ">",
+        "right": {
+          "kind": "ind",
+          "ind": "avg_vol20",
+          "params": {},
+          "mult": 2
+        }
+      },
+      {
+        "type": "cond",
+        "left": {
+          "kind": "ind",
+          "ind": "close",
+          "params": {}
+        },
+        "op": ">",
+        "right": {
+          "kind": "ind",
+          "ind": "sma",
+          "params": {
+            "period": 50
+          }
+        }
+      }
+    ]
+  },
+  "action": "BUY",
+  "exit": {
+    "type": "group",
+    "op": "or",
+    "negate": false,
+    "items": []
+  },
+  "execution": {
+    "entry_mode": "next_open",
+    "entry_valid_days": 1
+  },
+  "risk": {
+    "stop": {
+      "type": "atr",
+      "value": 2
+    },
+    "target": {
+      "type": "none"
+    },
+    "trail": {
+      "type": "atr",
+      "value": 3
+    },
+    "max_hold": 60
+  },
+  "portfolio": {
+    "capital": 1000000,
+    "sizing": "risk",
+    "risk_pct": 1,
+    "max_positions": 10,
+    "max_alloc_pct": 20
+  },
+  "costs": {
+    "profile": "india_delivery",
+    "fee_pct": 0.1,
+    "slippage_pct": 0.05
+  },
+  "period": {
+    "start": null,
+    "end": null
+  },
+  "id": "example-breakout-volume",
+  "saved": "2026-11-12T15:19:21"
+}

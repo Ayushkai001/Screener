@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "name": "EMA 9/21 crossover (trend filter)",
+  "instrument": {
+    "mode": "symbol",
+    "symbols": [
+      "RELIANCE.NS"
+    ]
+  },
+  "timeframe": "1d",
+  "entry": {
+    "type": "group",
+    "op": "and",
+    "negate": false,
+    "items": [
+      {
+        "type": "cond",
+        "left": {
+          "kind": "ind",
+          "ind": "ema",
+          "params": {
+            "period": 9
+          }
+        },
+        "op": "crosses_above",
+        "right": {
+          "kind": "ind",
+          "ind": "ema",
+          "params": {
+            "period": 21
+          }
+        }
+      },
+      {
+        "type": "cond",
+        "left": {
+          "kind": "ind",
+          "ind": "close",
+          "params": {}
+        },
+        "op": ">",
+        "right": {
+          "kind": "ind",
+          "ind": "ema",
+          "params": {
+            "period": 50
+          }
+        }
+      }
+    ]
+  },
+  "action": "BUY",
+  "exit": {
+    "type": "group",
+    "op": "and",
+    "negate": false,
+    "items": [
+      {
+        "type": "cond",
+        "left": {
+          "kind": "ind",
+          "ind": "ema",
+          "params": {
+            "period": 9
+          }
+        },
+        "op": "crosses_below",
+        "right": {
+          "kind": "ind",
+          "ind": "ema",
+          "params": {
+            "period": 21
+          }
+        }
+      }
+    ]
+  },
+  "execution": {
+    "entry_mode": "next_open",
+    "entry_valid_days": 1
+  },
+  "risk": {
+    "stop": {
+      "type": "pct",
+      "value": 3
+    },
+    "target": {
+      "type": "pct",
+      "value": 6
+    },
+    "trail": {
+      "type": "none"
+    },
+    "max_hold": 0
+  },
+  "portfolio": {
+    "capital": 100000,
+    "sizing": "equal",
+    "risk_pct": 1,
+    "max_positions": 1,
+    "max_alloc_pct": 100
+  },
+  "costs": {
+    "profile": "india_delivery",
+    "fee_pct": 0.1,
+    "slippage_pct": 0.05
+  },
+  "period": {
+    "start": null,
+    "end": null
+  },
+  "id": "example-ema-crossover",
+  "saved": "2026-11-12T15:19:21"
+}

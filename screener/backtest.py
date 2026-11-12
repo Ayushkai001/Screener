@@ -42,6 +42,7 @@ import datetime
 import math
 import os
 import random
+import re
 import statistics
 import time
 
@@ -104,9 +105,73 @@ class SpecError(ValueError):
     pass
 
 
-# ---------------------------------------------------------------- spec
-def _bt_fields():
-    return {k: v for k, v in FIELDS.items() if k not in NOT_HISTORICAL}
+# ---------------------------------------------------------------- custom periods
+# The live screener ships fixed periods (EMA 9/20/21/50/100/200, SMA 5…200,
+# RSI 14). A backtest rule may use any period - ema13, sma30, rsi7 - and
+# those are computed per symbol before the walk, with the same conventions
+# (SMA-seeded EMA, Wilder RSI). Value at bar t uses closes up to and
+# including t, exactly like the built-in fields on day t's row.
+CUSTOM_RE = re.compile(r"\b(ema|sma|rsi)(\d{1,3})(?:_prev)?\b", re.I)
+CUSTOM_MAX = 400
+
+
+def custom_fields(*srcs):
+    """Indicator names with a non-built-in period used in these expressions."""
+    out = set()
+    for src in srcs:
+        for m in CUSTOM_RE.finditer(src or ""):
+            kind, n = m.group(1).lower(), int(m.group(2))
+            name = "%s%d" % (kind, n)
+            if name in FIELDS:
+                continue
+            if not 2 <= n <= CUSTOM_MAX:
+                raise SpecError("%s period must be 2-%d (got %d)" % (kind.upper(), CUSTOM_MAX, n))
+            out.add(name)
+    return sorted(out)
+
+
+def _split_custom(name):
+    m = re.fullmatch(r"(ema|sma|rsi)(\d+)", name)
+    return m.group(1), int(m.group(2))
+
+
+def custom_series(bars, names):
+    """{name: [value per bar]} for custom-period indicators (None = warm-up)."""
+    closes = [b[4] for b in bars]
+    out = {}
+    for name in names:
+        kind, n = _split_custom(name)
+        if kind == "ema":
+            e = indicators.Ema(n)
+            out[name] = [e.step(c) for c in closes]
+        elif kind == "sma":
+            vals, run = [], 0.0
+            for i, c in enumerate(closes):
+                run += c - (closes[i - n] if i >= n else 0.0)
+                if i and i % 500 == 0:            # re-sum: no float drift over 10 years
+                    run = math.fsum(closes[max(0, i - n + 1):i + 1])
+                vals.append(run / n if i >= n - 1 else None)
+            out[name] = vals
+        else:   # rsi: Wilder, same steps as indicators.Base
+            g, l = indicators.Rma(n), indicators.Rma(n)
+            vals = [None]
+            for a, b in zip(closes, closes[1:]):
+                ch = b - a
+                vals.append(indicators._rsi(g.step(max(ch, 0.0)), l.step(max(-ch, 0.0))))
+            out[name] = vals[:len(closes)]
+    return out
+
+
+def _bt_fields(custom=()):
+    f = {k: v for k, v in FIELDS.items() if k not in NOT_HISTORICAL}
+    for name in custom:
+        kind, n = _split_custom(name)
+        fmt = "num" if kind == "rsi" else "price"
+        f[name] = {"label": "%s %d" % (kind.upper(), n), "type": "num", "fmt": fmt, "group": "Custom",
+                   "prev": name + "_prev"}
+        f[name + "_prev"] = {"label": "%s %d (prev)" % (kind.upper(), n), "type": "num", "fmt": fmt,
+                             "group": "Custom", "prev": None}
+    return f
 
 
 def _level(src, kinds, what):
@@ -138,10 +203,14 @@ def prepare(spec):
     s.update({k: v for k, v in (spec or {}).items() if v is not None})
     s["costs"] = dict(COSTS, **(spec or {}).get("costs") or {})
     s["portfolio"] = dict(DEFAULTS["portfolio"], **(spec or {}).get("portfolio") or {})
-    fields = _bt_fields()
     warnings = []
     if not (s["entry"] or "").strip():
         raise SpecError("an entry rule is required, e.g. crosses_above(ema9, ema21) and turnover > 5cr")
+    level_srcs = [v.partition(":")[2] for v in (s.get("stop"), s.get("target"))
+                  if isinstance(v, str) and v.strip().lower().startswith("expr:")]
+    s["_custom"] = custom_fields(s["entry"], s.get("exit"),
+                                 s["entry_level"] if s["entry_mode"] == "buy_stop" else "", *level_srcs)
+    fields = _bt_fields(s["_custom"])
     used = set()
     _, u = expr.compile_filter(s["entry"], fields)
     used |= u
@@ -199,8 +268,9 @@ def prepare(spec):
 # ---------------------------------------------------------------- simulation
 class _Compiled:
     def __init__(self, s):
-        fields = _bt_fields()
+        fields = _bt_fields(s.get("_custom") or ())
         self.s = s
+        self.custom = s.get("_custom") or []
         self.entry, _ = expr.compile_filter(s["entry"], fields)
         self.exit = expr.compile_filter(s["exit"], fields)[0] if (s.get("exit") or "").strip() else None
         self.entry_level = expr.compile_value(s["entry_level"], fields)[0] if s["entry_mode"] == "buy_stop" else None
@@ -223,7 +293,7 @@ class _Compiled:
 INFO_KEYS = ("sym", "name", "exchange", "series", "industry", "indices")
 
 
-def _row(base, bar, bars, t, info, need_static, need_flags):
+def _row(base, bar, bars, t, info, need_static, need_flags, cust=None):
     """The day's row as the live screener would show it at the close. Lazy:
     indicator groups are computed only when the rule reads one of their
     fields; pattern flags only when the rule uses a pattern."""
@@ -232,6 +302,10 @@ def _row(base, bar, bars, t, info, need_static, need_flags):
     for k in INFO_KEYS:
         row[k] = info.get(k)
     row.update(price=c, open=o, high=h, low=l, volume=v, hist_days=base.n, prev_volume=base.prev_volume)
+    if cust:
+        for k, arr in cust.items():
+            row[k] = arr[t]
+            row[k + "_prev"] = arr[t - 1] if t else None
     if need_flags:
         st = patterns.static(bars[max(0, t - STATIC_WINDOW):t], need_flags) if need_static else {}
         row.update(patterns.live_flags(st, row, c, v, need_flags))
@@ -284,13 +358,17 @@ def simulate(bars, info, cp, counters=None):
         cnt[k] = cnt.get(k, 0) + 1
 
     base = indicators.Base([])
+    cust = custom_series(bars, cp.custom) if cp.custom else None
+    # Forex (and some indices) carry no volume at all: there, volume 0 is
+    # "not reported", not "no trades", so it cannot mark a day untradable.
+    no_volume = sum(1 for b in bars if b[5] > 0) < 0.05 * len(bars)
     trades = []
     pos = None
     pend = None
     first_needed = cp.start or ""
     for t, bar in enumerate(bars):
         d, o, h, l, c, v = bar
-        tradable = v > 0 and h >= l > 0
+        tradable = (v > 0 or no_volume) and h >= l > 0
         locked = tradable and o == h == l == c
 
         # ---- 1. a pending entry tries to fill
@@ -374,7 +452,7 @@ def simulate(bars, info, cp, counters=None):
         # ---- 3. the day's fields (only when something needs them)
         need_row = (pos is not None and not exited and (cp.exit or cp.trail[0] == "atr")) or \
                    (pos is None and pend is None and d >= first_needed and (cp.end is None or d <= cp.end))
-        row = _row(base, bar, bars, t, info, cp.need_static, cp.need_flags) if (need_row and base.n) else None
+        row = _row(base, bar, bars, t, info, cp.need_static, cp.need_flags, cust) if (need_row and base.n) else None
 
         # ---- 4. close-of-day management for the open position
         if pos is not None and pos["entry_i"] <= t:
@@ -649,19 +727,88 @@ def curve_stats(curve, capital):
             mdd, mdd_at = dd, curve[i][0]
     longest = max(longest, len(eq) - 1 - cur_start)
     sd = statistics.pstdev(rets) if len(rets) > 1 else 0
+    # bars per year as observed: ~248 for NSE, ~365 for crypto, ~260 for forex
+    ppy = (len(eq) - 1) / years if years >= 0.5 else 248
     return {
         "start": curve[0][0], "end": curve[-1][0], "final": final,
         "total_return_pct": (final / capital - 1) * 100.0,
         "cagr_pct": ((final / capital) ** (1 / years) - 1) * 100.0 if final > 0 else -100.0,
         "max_drawdown_pct": mdd * 100.0, "max_drawdown_date": mdd_at,
         "longest_drawdown_days": longest,
-        "sharpe": (statistics.fmean(rets) / sd * math.sqrt(248)) if sd > 0 else None,
-        "volatility_pct": sd * math.sqrt(248) * 100.0,
+        "sharpe": (statistics.fmean(rets) / sd * math.sqrt(ppy)) if sd > 0 else None,
+        "volatility_pct": sd * math.sqrt(ppy) * 100.0,
     }
 
 
 # ---------------------------------------------------------------- runner
 _W = {}
+
+
+INDIAN_RE = re.compile(r"(\.NS|\.BO)$|^\^(NSE|BSE|CNX)", re.I)
+REFRESH_SECS = 12 * 3600
+
+
+def ensure_history(ysym, client, root=BT_ROOT, max_age=REFRESH_SECS):
+    """10-year daily bars for any Yahoo symbol, cached in `root`. NSE/BSE
+    symbols and indices go through HistoryStore (split checks, IST partial-bar
+    rule). Anything else (BTC-USD, EURUSD=X, AAPL, GC=F) is fetched whole and
+    its most recent day dropped: it may still be trading in its own time zone,
+    and a partial bar would be a look-ahead. Returns bars; on a network error
+    returns the cached bars if any, else raises."""
+    from . import yahoo
+    from .history import HistoryStore
+    path = os.path.join(root, _fname(ysym))
+    doc = net.read_json(path)
+    cached = [tuple(b) for b in doc["bars"]] if doc and doc.get("ysym") == ysym else None
+    if cached and time.time() - (doc.get("fetched") or 0) < max_age:
+        return cached
+    try:
+        if INDIAN_RE.search(ysym):
+            store = HistoryStore(root, client, full_range=BT_RANGE, max_bars=BT_MAX_BARS)
+            store.load([ysym])
+            store.sync(ysym)
+            return list(store.bars(ysym))
+        bars, _, _ = yahoo.parse_chart_daily(client.get_json(yahoo.chart_urls(ysym, BT_RANGE, "1d")))
+        cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)).date().isoformat()
+        bars = [tuple(b) for b in bars if b[0] < cutoff][-BT_MAX_BARS:]
+        if not bars:
+            raise ValueError("no daily history for %s" % ysym)
+        net.write_json(path, {"ysym": ysym, "fetched": int(time.time()), "bars": [list(b) for b in bars]})
+        return bars
+    except (net.FetchError, ValueError):
+        if cached:
+            return cached
+        raise
+
+
+def external_info(ysym):
+    """Row info for an instrument that is not in the NSE/BSE universe."""
+    return {"sym": ysym, "ysym": ysym, "exchange": "EXT", "name": ysym, "series": None,
+            "industry": None, "indices": []}
+
+
+def series(bars, names, info=None):
+    """Per-bar values of `names` exactly as the backtester sees them on each
+    day's row (same Base walk, same custom-period code). For chart overlays:
+    what is drawn is what the rule was tested on."""
+    custom = custom_fields(*names)
+    fields = _bt_fields(custom)
+    bad = [n for n in names if n not in fields]
+    if bad:
+        raise SpecError("unknown field(s): %s" % ", ".join(bad))
+    flags = set(names) & FLAG_FIELDS
+    need_static = bool(set(names) & STATIC_FIELDS)
+    cust = custom_series(bars, custom) if custom else None
+    base = indicators.Base([])
+    info = info or {}
+    out = {n: [] for n in names}
+    for t, bar in enumerate(bars):
+        row = _row(base, bar, bars, t, info, need_static, flags, cust) if base.n else None
+        for n in names:
+            v = row.get(n) if row is not None else None
+            out[n].append(v if not isinstance(v, float) or math.isfinite(v) else None)
+        base.advance(bar)
+    return out
 
 
 def _init_worker(spec, hist_root):
@@ -700,6 +847,10 @@ def run(spec, universe_doc, hist_root=BT_ROOT, workers=None, progress=None, log=
     if s.get("symbols"):
         want = set(s["symbols"])
         syms = [x for x in syms if x["sym"] in want or x["ysym"] in want]
+        known = {x["sym"] for x in syms} | {x["ysym"] for x in syms}
+        # instruments outside the NSE/BSE list (index, crypto, forex, US...):
+        # tested from their own cached history in hist_root
+        syms += [external_info(y) for y in s["symbols"] if y not in known]
     if not syms:
         raise SpecError("no symbols to test")
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
@@ -740,10 +891,12 @@ def run(spec, universe_doc, hist_root=BT_ROOT, workers=None, progress=None, log=
         n = counters["ambiguous"]
         warnings.append("%d day%s touched both stop and target; counted as stop%s (daily bars cannot "
                         "tell which came first)" % (n, "" if n == 1 else "s", "" if n == 1 else "s"))
-    warnings.append("survivorship bias: tested on today's listed stocks - companies delisted or merged "
-                    "during the period are missing, which flatters results")
+    if not s.get("symbols"):
+        warnings.append("survivorship bias: tested on today's listed stocks - companies delisted or merged "
+                        "during the period are missing, which flatters results")
 
-    bench = _load_bars(hist_root, BENCH) or []
+    bench_sym = s.get("benchmark") or BENCH
+    bench = _load_bars(hist_root, bench_sym) or []
     path_dates = {d for t in trades for d, _ in t["path"]}
     first = s.get("start") or min((t["entry_date"] for t in trades), default=None) or \
         (bench[0][0] if bench else None)
@@ -774,7 +927,7 @@ def run(spec, universe_doc, hist_root=BT_ROOT, workers=None, progress=None, log=
         "by_year": by_year(trades),
         "portfolio": dict(cstats, trades_taken=len(taken), skipped=skipped, exposure_pct=exposure,
                           trade_stats=trade_stats([t for t in taken if t["pnl"] is not None])),
-        "benchmark": dict(bstats, symbol=BENCH) if bstats else None,
+        "benchmark": dict(bstats, symbol=bench_sym) if bstats else None,
         "equity": _thin(curve), "bench_equity": _thin(bcurve),
         "trades": [{k: (round(v, 4) if isinstance(v, float) else v) for k, v in t.items() if k != "path"}
                    for t in trades],
@@ -817,7 +970,7 @@ def list_results(root=RESULTS, limit=50):
         if not doc:
             continue
         pf, ex = doc.get("portfolio") or {}, doc.get("every_signal") or {}
-        out.append({"id": doc.get("id") or n[:-8], "entry": doc["spec"]["entry"], "stop": doc["spec"]["stop"],
+        out.append({"id": doc.get("id") or n[:-8], "name": doc["spec"].get("name"), "entry": doc["spec"]["entry"], "stop": doc["spec"]["stop"],
                     "target": doc["spec"]["target"], "trades": ex.get("trades"),
                     "expectancy_r": ex.get("expectancy_r"), "cagr_pct": pf.get("cagr_pct"),
                     "max_drawdown_pct": pf.get("max_drawdown_pct")})

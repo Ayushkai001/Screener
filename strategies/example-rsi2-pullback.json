@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "name": "RSI 2 pullback in an uptrend",
+  "instrument": {
+    "mode": "symbol",
+    "symbols": [
+      "HDFCBANK.NS"
+    ]
+  },
+  "timeframe": "1d",
+  "entry": {
+    "type": "group",
+    "op": "and",
+    "negate": false,
+    "items": [
+      {
+        "type": "cond",
+        "left": {
+          "kind": "ind",
+          "ind": "rsi",
+          "params": {
+            "period": 2
+          }
+        },
+        "op": "<",
+        "right": {
+          "kind": "value",
+          "value": 10
+        }
+      },
+      {
+        "type": "cond",
+        "left": {
+          "kind": "ind",
+          "ind": "close",
+          "params": {}
+        },
+        "op": ">",
+        "right": {
+          "kind": "ind",
+          "ind": "sma",
+          "params": {
+            "period": 200
+          }
+        }
+      }
+    ]
+  },
+  "action": "BUY",
+  "exit": {
+    "type": "group",
+    "op": "or",
+    "negate": false,
+    "items": [
+      {
+        "type": "cond",
+        "left": {
+          "kind": "ind",
+          "ind": "close",
+          "params": {}
+        },
+        "op": "crosses_above",
+        "right": {
+          "kind": "ind",
+          "ind": "sma",
+          "params": {
+            "period": 5
+          }
+        }
+      }
+    ]
+  },
+  "execution": {
+    "entry_mode": "next_open",
+    "entry_valid_days": 1
+  },
+  "risk": {
+    "stop": {
+      "type": "atr",
+      "value": 3
+    },
+    "target": {
+      "type": "none"
+    },
+    "trail": {
+      "type": "none"
+    },
+    "max_hold": 10
+  },
+  "portfolio": {
+    "capital": 100000,
+    "sizing": "equal",
+    "risk_pct": 1,
+    "max_positions": 1,
+    "max_alloc_pct": 100
+  },
+  "costs": {
+    "profile": "india_delivery",
+    "fee_pct": 0.1,
+    "slippage_pct": 0.05
+  },
+  "period": {
+    "start": null,
+    "end": null
+  },
+  "id": "example-rsi2-pullback",
+  "saved": "2026-11-12T15:19:21"
+}

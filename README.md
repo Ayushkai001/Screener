@@ -10,7 +10,7 @@ updating live in the browser. Python standard library only, with no `pip install
 .venv/bin/python main.py scan "rsi14 < 30 and turnover > 5cr" --sort rsi14 --asc
 .venv/bin/python main.py bt-sync         # 10 years of daily history for backtests, once (~13 min, ~100 MB)
 .venv/bin/python main.py backtest "double_bottom and turnover > 1cr" --stop expr:db_stop --target expr:db_target --hold 40
-.venv/bin/python -m unittest discover -s tests   # 81 tests, offline
+.venv/bin/python -m unittest discover -s tests   # 100 tests, offline
 ```
 
 `serve` works without `sync`: quotes show right away and indicators fill in
@@ -54,6 +54,36 @@ through a >45% one-day move (bad Yahoo data) are dropped. **Still biased upward 
 is today's, so companies that were delisted or merged are missing. Index membership (`indices`) is today's too, so
 the page warns when a rule uses it. Results are saved in `results/backtests/`.
 
+## STRATLAB Studio: build strategies without code
+
+Open **http://127.0.0.1:8765/studio**. You build a strategy with dropdowns instead of writing rules:
+
+1. **Market**: one instrument (any NSE/BSE stock, NIFTY/BANKNIFTY/SENSEX, BTC-USD, EURUSD=X, GC=F, AAPL... any
+   Yahoo symbol, whose 10-year history is fetched on first use), or every NSE/BSE stock at once.
+2. **Entry conditions**: `[indicator] [crosses above / is above / is between / is rising…] [indicator or value]`,
+   with ALL/ANY groups that can be nested and negated, plus the 20 pattern flags. EMA, SMA and RSI accept **any period**
+   (EMA 13, SMA 30, RSI 2). The right-hand side takes a multiplier (`volume > 2 × avg volume 20`).
+3. **Exit & risk**: stop (% / ATR / at a level such as the signal-day low or the double-bottom stop), target
+   (% / R / ATR / level), trailing stop, max days, and an exit rule built the same way.
+4. **Sizing & costs**: capital, all-in or fixed-risk sizing, India delivery charges or a flat % for other markets.
+
+**Chart builder:** *Draw level* → click the chart → "when the close crosses above 2,512" becomes a condition.
+*Draw zone* → two clicks → "close is inside the zone". Drawn rules show as dashed lines and are ordinary
+conditions in the builder (tagged *chart*), so you can edit them there.
+
+**Results:** net profit, CAGR against buy & hold of the same instrument (NIFTY 50 for the universe), win rate,
+profit factor, drawdown, expectancy in R, Sharpe, time in market, a 95% "is this luck?" check, equity curve, a
+year-by-year table, and every trade. Click a trade to see its entry, stop and target on the chart. **Library** holds
+templates, your saved strategies and recent runs (reopen a run with its strategy).
+
+How it works: both builders produce one JSON format, the *Strategy IR* (`screener/strategy.py`, saved in
+`strategies/`). It compiles to the filter language above and runs on the same backtester, with the same fills,
+costs and bias rules. The rule the Studio shows under the builder is exactly what is tested. The indicator lines
+on the chart are computed by the backtester's own code, so they show exactly the values the rule was tested on.
+
+Not yet: intraday timeframes, short selling, options chains, SMC patterns (FVG, BOS, CHoCH, liquidity sweeps),
+parameter optimisation and walk-forward tests.
+
 ## How "real-time" works and its limits
 
 | | |
@@ -80,10 +110,13 @@ screener/patterns.py   breakouts, bull flag, double bottom, NR7, crosses…
 screener/expr.py       filter language (no eval), three-valued NULL logic
 screener/fields.py     field registry + presets
 screener/engine.py     live engine: scheduler, workers, rows, validation
-screener/backtest.py   backtester: day-by-day walk, fills/exits, costs, portfolio, statistics
+screener/backtest.py   backtester: day-by-day walk, fills/exits, costs, portfolio, statistics, any-period EMA/SMA/RSI
+screener/strategy.py   STRATLAB Strategy IR: validation, compiler to rules, catalog, save/load
 screener/server.py     HTTP + Server-Sent Events, backtest jobs
 screener/web/index.html  the screener UI (vanilla JS, works offline)
 screener/web/backtest.html  the backtest UI
+screener/web/studio.html    STRATLAB Studio (visual + chart builder, results); vendor/ = Lightweight Charts 4.2 (Apache-2.0)
+strategies/            saved strategies (example-*.json are the templates)
 data/                  runtime cache (universe, history, special sessions; safe to delete)
 ```
 

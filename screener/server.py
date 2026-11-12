@@ -8,6 +8,14 @@ GET /api/stream?...     live results (SSE): a new table whenever data changes,
                         at most once per `min_push` seconds
 GET /api/symbol?ysym=   one row + recent daily bars (detail panel)
 GET /backtest           the backtest UI
+GET /studio             STRATLAB strategy studio (visual + chart builder)
+GET /api/studio/catalog indicators, comparisons, patterns for the builder
+GET /api/studio/chart?ysym=&fields=a,b   10y bars + indicator series as tested
+GET /api/studio/search?q=                instruments (NSE/BSE + indices, crypto, FX, US)
+POST /api/studio/compile                 Strategy IR -> rules, or a 400 with the reason
+POST /api/studio/run                     Strategy IR -> backtest job {"id"}
+GET /api/strategies     saved strategies;  GET /api/strategy?id=  one
+POST /api/strategies    save;  POST /api/strategies/delete {"id"}
 POST /api/backtest      start a backtest (JSON spec) -> {"id"}; one at a time
 GET /api/backtest?id=   progress of a running job, or a saved result
 GET /api/backtests      saved runs, newest first
@@ -38,7 +46,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import traceback
 
-from . import backtest, expr
+from . import backtest, expr, strategy
 from .fields import DEFAULT_COLUMNS, FIELDS, PRESETS
 
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
@@ -57,6 +65,27 @@ def deep_clean(v):
 
 
 MAX_TRADES_SENT = 3000
+VENDOR = {"lightweight-charts.js": "application/javascript; charset=utf-8"}
+POST_ROUTES = {"/api/backtest": None, "/api/studio/compile": "_studio_compile", "/api/studio/run": "_studio_run",
+               "/api/strategies": "_save_strategy", "/api/strategies/delete": "_delete_strategy"}
+SYM_RE = __import__("re").compile(r"[A-Za-z0-9.^=&_-]{1,30}")
+# Instruments outside the NSE/BSE list, fetched from Yahoo on first use
+EXTERNAL = [
+    {"ysym": "^NSEI", "name": "NIFTY 50", "kind": "Index"},
+    {"ysym": "^NSEBANK", "name": "NIFTY BANK", "kind": "Index"},
+    {"ysym": "^BSESN", "name": "SENSEX", "kind": "Index"},
+    {"ysym": "^CNXIT", "name": "NIFTY IT", "kind": "Index"},
+    {"ysym": "BTC-USD", "name": "Bitcoin / USD", "kind": "Crypto"},
+    {"ysym": "ETH-USD", "name": "Ethereum / USD", "kind": "Crypto"},
+    {"ysym": "SOL-USD", "name": "Solana / USD", "kind": "Crypto"},
+    {"ysym": "USDINR=X", "name": "USD / INR", "kind": "Forex"},
+    {"ysym": "EURUSD=X", "name": "EUR / USD", "kind": "Forex"},
+    {"ysym": "GBPUSD=X", "name": "GBP / USD", "kind": "Forex"},
+    {"ysym": "GC=F", "name": "Gold futures (continuous)", "kind": "Commodity"},
+    {"ysym": "CL=F", "name": "Crude oil futures (continuous)", "kind": "Commodity"},
+    {"ysym": "^GSPC", "name": "S&P 500", "kind": "Index"},
+    {"ysym": "AAPL", "name": "Apple", "kind": "US"},
+]
 
 
 class Jobs:
@@ -215,6 +244,26 @@ class Handler(BaseHTTPRequestHandler):
             if u.path in ("/backtest", "/backtest.html"):
                 with open(os.path.join(WEB, "backtest.html"), "rb") as f:
                     return self._send(200, f.read(), "text/html; charset=utf-8")
+            if u.path in ("/studio", "/studio.html"):
+                with open(os.path.join(WEB, "studio.html"), "rb") as f:
+                    return self._send(200, f.read(), "text/html; charset=utf-8")
+            if u.path.startswith("/vendor/"):
+                name = u.path[len("/vendor/"):]
+                if name not in VENDOR:
+                    return self._send(404, {"error": "not found"})
+                with open(os.path.join(WEB, "vendor", name), "rb") as f:
+                    return self._send(200, f.read(), VENDOR[name], {"Cache-Control": "max-age=86400"})
+            if u.path == "/api/studio/catalog":
+                return self._send(200, deep_clean(strategy.catalog()))
+            if u.path == "/api/studio/chart":
+                return self._chart(params.get("ysym", ""), params.get("fields", ""))
+            if u.path == "/api/studio/search":
+                return self._send(200, {"results": self._search(params.get("q", ""))})
+            if u.path == "/api/strategies":
+                return self._send(200, {"strategies": strategy.list_saved()})
+            if u.path == "/api/strategy":
+                ir = strategy.load(params.get("id", ""))
+                return self._send(200, ir) if ir else self._send(404, {"error": "no such strategy"})
             if u.path == "/api/backtests":
                 return self._send(200, {"runs": deep_clean(backtest.list_results()),
                                         "running": self.jobs.running,
@@ -241,7 +290,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urllib.parse.urlsplit(self.path)
-        if u.path != "/api/backtest":
+        if u.path not in POST_ROUTES:
             return self._send(404, {"error": "not found"})
         # JSON only: a cross-site form post cannot send application/json
         # without a CORS preflight, which this server never approves
@@ -256,6 +305,13 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("spec must be a JSON object")
         except ValueError as e:
             return self._send(400, {"error": "bad JSON: %s" % e})
+        if u.path != "/api/backtest":
+            try:
+                return getattr(self, POST_ROUTES[u.path])(spec)
+            except strategy.StrategyError as e:
+                return self._send(400, {"error": str(e)})
+            except (BrokenPipeError, ConnectionResetError):
+                return
         uni = {"symbols": sorted(self.engine.info.values(), key=lambda x: -x.get("turnover", 0))}
         try:
             jid = self.jobs.start(spec, uni)
@@ -287,6 +343,75 @@ class Handler(BaseHTTPRequestHandler):
         backtest.write_csv_to(res["trades"], buf)
         return self._send(200, buf.getvalue(), "text/csv; charset=utf-8",
                           {"Content-Disposition": 'attachment; filename="%s.csv"' % res.get("id", "backtest")})
+
+    # ---- STRATLAB studio ------------------------------------------------
+    def _universe(self):
+        return {"symbols": sorted(self.engine.info.values(), key=lambda x: -x.get("turnover", 0))}
+
+    def _bars(self, ysym):
+        if not SYM_RE.fullmatch(ysym or ""):
+            raise strategy.StrategyError("bad symbol %r" % ysym)
+        try:
+            return backtest.ensure_history(ysym, self.engine.client)
+        except (backtest.net.FetchError, ValueError) as e:
+            raise strategy.StrategyError("no history for %s (%s)" % (ysym, e)) from None
+
+    def _chart(self, ysym, fields):
+        names = [f.strip() for f in fields.split(",") if f.strip()][:16]
+        try:
+            bars = self._bars(ysym)
+            series = backtest.series(bars, names, self.engine.info.get(ysym)) if names else {}
+        except strategy.StrategyError as e:
+            return self._send(400, {"error": str(e)})
+        except backtest.SpecError as e:
+            return self._send(400, {"error": str(e)})
+        info = self.engine.info.get(ysym) or {}
+        return self._send(200, deep_clean({"ysym": ysym, "name": info.get("name") or ysym,
+                                           "exchange": info.get("exchange") or "EXT",
+                                           "bars": [list(b) for b in bars], "series": series}))
+
+    def _search(self, q):
+        q = (q or "").strip().lower()
+        out = []
+        for e in EXTERNAL:
+            if not q or q in e["ysym"].lower() or q in e["name"].lower():
+                out.append(e)
+        if q:
+            for ysym in self.engine.order:
+                x = self.engine.info[ysym]
+                if q in x["sym"].lower() or q in (x.get("name") or "").lower():
+                    out.append({"ysym": ysym, "name": x.get("name") or x["sym"], "kind": x["exchange"]})
+                    if len(out) >= 40:
+                        break
+            if SYM_RE.fullmatch(q) and not any(o["ysym"].lower() == q for o in out):
+                out.append({"ysym": q.upper(), "name": "Any Yahoo symbol: %s" % q.upper(), "kind": "Yahoo"})
+        return out[:40]
+
+    def _studio_compile(self, ir):
+        spec, warnings = strategy.compile_strategy(ir)
+        return self._send(200, {"summary": strategy.describe(spec), "entry": spec["entry"],
+                                "exit": spec["exit"], "warnings": warnings,
+                                "chart_fields": strategy.chart_fields(ir)})
+
+    def _studio_run(self, ir):
+        spec, _ = strategy.compile_strategy(ir)
+        for y in spec.get("symbols") or []:
+            if y not in self.engine.info:
+                self._bars(y)                    # fetch / refresh before the job starts
+        try:
+            jid = self.jobs.start(spec, self._universe())
+        except RuntimeError as e:
+            return self._send(409, {"error": str(e)})
+        except ValueError as e:
+            return self._send(400, {"error": str(e)})
+        return self._send(202, {"id": jid})
+
+    def _save_strategy(self, ir):
+        return self._send(200, strategy.save(ir))
+
+    def _delete_strategy(self, body):
+        ok = strategy.delete(str(body.get("id") or ""))
+        return self._send(200 if ok else 404, {"ok": ok})
 
     def _symbol(self, ysym):
         eng = self.engine

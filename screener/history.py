@@ -38,10 +38,12 @@ def _fname(ysym):
     return re.sub(r"[^A-Za-z0-9._-]", lambda m: "_%02X" % ord(m.group()), ysym) + ".json.gz"
 
 
-def merge(old, new):
-    """Merge fresh bars into cached bars. Returns (bars, ok). ok=False means the
-    overlap disagrees (split/bonus/data revision) and the caller must refetch
-    the full range instead of trusting `old`."""
+def merge(old, new, max_bars=MAX_BARS):
+    """Merge fresh bars into cached bars, keeping the last `max_bars`.
+    Returns (bars, ok). ok=False means the overlap disagrees (split/bonus/data
+    revision) and the caller must refetch the full range instead of trusting
+    `old`. max_bars must be the store's own limit: the 10-year backtest store
+    calling this with the screener's 520 would cut its history to two years."""
     if not old:
         return list(new), True
     if not new:
@@ -59,7 +61,7 @@ def merge(old, new):
         return list(old), False
     first = new[0][0]
     bars = [b for b in old if b[0] < first] + list(new)
-    return bars[-MAX_BARS:], True
+    return bars[-max_bars:], True
 
 
 def drop_partial(bars, fetched_at):
@@ -121,7 +123,7 @@ class HistoryStore:
             yahoo.chart_urls(s, self.full_range if mode == "full" else INCR_RANGE, "1d")))
         bars, partial = drop_partial([tuple(b) for b in bars], now)
         if mode == "incr":
-            merged, ok = merge(old, bars)
+            merged, ok = merge(old, bars, self.max_bars)
             if not ok:
                 return self.sync(s, now, force_full=True)
             bars = merged
