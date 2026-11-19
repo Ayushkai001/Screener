@@ -6,6 +6,7 @@ import { PaperTradingDashboard } from "./components/PaperTradingDashboard";
 import { StrategyGraphStudio } from "./components/StrategyGraphStudio";
 import { VisualStrategyBuilder } from "./components/VisualStrategyBuilder";
 import { VolumeProfileView } from "./components/VolumeProfileView";
+import { useMarketStream } from "./hooks/useMarketStream";
 import {
   AssetClass,
   DataQuality,
@@ -209,6 +210,49 @@ export const App: React.FC = () => {
     DEFAULT_INSTRUMENTS[0]
   );
 
+  const [footprintBars, setFootprintBars] = useState<FootprintBar[]>(SAMPLE_FOOTPRINT_BARS);
+  const [isSimulating, setIsSimulating] = useState(false);
+
+  // Live WebSocket Streaming Integration
+  const { isConnected, latencyMs, tickCount } = useMarketStream({
+    instrumentId: selectedInst.instrument_id,
+    onFootprintUpdate: (updatedBar) => {
+      setFootprintBars((prev) => {
+        const next = [...prev];
+        const lastIdx = next.length - 1;
+        if (lastIdx >= 0 && next[lastIdx].timestamp_utc === updatedBar.timestamp_utc) {
+          next[lastIdx] = updatedBar;
+        } else {
+          next.push(updatedBar);
+        }
+        return next;
+      });
+    },
+    onExecutionFill: (fill) => {
+      setPaperOrders((prev) =>
+        prev.map((o) =>
+          o.order_id === fill.order_id
+            ? { ...o, status: "FILLED", filled_quantity: fill.quantity, price: fill.price }
+            : o
+        )
+      );
+    },
+  });
+
+  const toggleSimulation = async () => {
+    try {
+      if (isSimulating) {
+        await fetch("http://localhost:8000/api/v1/market/simulation/stop", { method: "POST" });
+        setIsSimulating(false);
+      } else {
+        await fetch("http://localhost:8000/api/v1/market/simulation/start?interval=0.5", { method: "POST" });
+        setIsSimulating(true);
+      }
+    } catch {
+      setIsSimulating(!isSimulating);
+    }
+  };
+
   const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null);
 
   // Paper trading state
@@ -329,8 +373,34 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Global Active Ticker Indicator */}
+        {/* Global Active Ticker Indicator & Live Stream Monitor */}
         <div className="flex items-center gap-3">
+          {/* Live Simulator Toggle */}
+          <button
+            onClick={toggleSimulation}
+            className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
+              isSimulating
+                ? "bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-600/30"
+                : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30"
+            }`}
+          >
+            <span>{isSimulating ? "⏹ Stop Sim" : "▶ Live Sim"}</span>
+          </button>
+
+          {/* WebSocket Status */}
+          <div className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-[11px] font-mono flex items-center gap-2">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isConnected ? "bg-emerald-400 animate-pulse" : "bg-slate-500"
+              }`}
+            />
+            <span className="text-slate-300">
+              {isConnected ? `Live (${latencyMs}ms)` : "Offline"}
+            </span>
+            <span className="text-slate-600">|</span>
+            <span className="text-cyan-400 font-bold">{tickCount} Ticks</span>
+          </div>
+
           <div className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1 text-xs font-mono flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
             <span className="text-slate-400">{selectedInst.exchange}:</span>
@@ -415,13 +485,13 @@ export const App: React.FC = () => {
 
             {footprintViewMode === "canvas" ? (
               <CanvasFootprintChart
-                bars={SAMPLE_FOOTPRINT_BARS}
+                bars={footprintBars}
                 symbol={selectedInst.symbol}
                 timeframe="5m"
               />
             ) : (
               <FootprintChart
-                bars={SAMPLE_FOOTPRINT_BARS}
+                bars={footprintBars}
                 symbol={selectedInst.symbol}
                 timeframe="5m"
               />

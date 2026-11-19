@@ -1,13 +1,14 @@
 """STRATLAB Market Data & Order Flow REST Endpoints."""
 
 from datetime import date
-from typing import List, Optional
+from typing import Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from shared.schemas.instrument import AssetClass, InstrumentMaster
 from shared.schemas.market_data import Candle
 from shared.schemas.order_flow import FootprintBar, VolumeProfile
 from shared.schemas.provenance import DataQuality, ProvenanceMetadata
 from backend.app.analytics.volume_profile.profile import VolumeProfileEngine
+from backend.app.market_data.streaming.feed_simulator import feed_simulator
 
 
 router = APIRouter(prefix="/market", tags=["Market Data & Order Flow"])
@@ -103,3 +104,23 @@ def get_volume_profile(
     if not profile:
         raise HTTPException(status_code=404, detail="Could not calculate volume profile")
     return profile
+
+
+@router.post("/simulation/start")
+def start_market_simulation(interval: float = Query(0.5, ge=0.1, le=5.0)) -> Dict[str, str]:
+    """Start high-frequency live market tick simulation and queue execution."""
+    feed_simulator.start(interval_seconds=interval)
+    return {"status": "started", "interval_seconds": str(interval)}
+
+
+@router.post("/simulation/stop")
+def stop_market_simulation() -> Dict[str, str]:
+    """Stop live market tick simulation."""
+    feed_simulator.stop()
+    return {"status": "stopped"}
+
+
+@router.get("/simulation/status")
+def get_simulation_status() -> Dict[str, bool]:
+    """Query live simulation status."""
+    return {"is_running": feed_simulator.is_running}
