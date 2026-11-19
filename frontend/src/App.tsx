@@ -418,7 +418,7 @@ export const App: React.FC = () => {
       ],
     };
     setBacktestResult(mockRes);
-    setActiveTab("backtest");
+    setActiveTab("studio");
   };
 
   const handlePlacePaperOrder = (orderData: Partial<PaperOrder>) => {
@@ -566,10 +566,10 @@ export const App: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`px-5 py-2 rounded-full font-bold transition-all flex items-center gap-2 text-xs tracking-wide cursor-pointer ${
+              className={`px-5 py-2.5 rounded-full font-bold transition-all flex items-center gap-2 text-xs tracking-wide cursor-pointer ${
                 activeTab === tab.id
-                  ? "bg-lime-primary text-black shadow-glow-lime-subtle font-extrabold"
-                  : "text-[#8e8e96] hover:text-white bg-[#131316] border border-[#202026] hover:border-[#32323c]"
+                  ? "bg-[#D4F638] text-black shadow-[0_0_20px_rgba(212,246,56,0.35)] font-black"
+                  : "text-[#a0a0ab] hover:text-white bg-[#141418] border border-[#22222a] hover:border-[#33333f]"
               }`}
             >
               <span>{tab.icon}</span>
@@ -675,64 +675,12 @@ export const App: React.FC = () => {
         {/* Tab 01 (Active): Customizable Strategy Builder & Backtest Lab */}
         {activeTab === "studio" && (
           <div className="flex flex-col gap-6">
-            {/* Studio Mode Toggle */}
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-obsidian-900 border border-slate-800/90 rounded-xl p-3 shadow-xl backdrop-blur">
-              <span className="text-xs font-bold text-white flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-violet-500 shadow-glow-indigo" />
-                Strategy Research Interface:
-              </span>
-              <div className="flex rounded-lg border border-slate-800 bg-obsidian-950 p-0.5 text-xs font-mono">
-                <button
-                  onClick={() => setStudioViewMode("lego")}
-                  className={`px-3 py-1 rounded-md font-bold transition-all ${
-                    studioViewMode === "lego"
-                      ? "bg-violet-600 text-white shadow-glow-indigo"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  🧩 Lego Blocks (Multi-Concept)
-                </button>
-                <button
-                  onClick={() => setStudioViewMode("graph")}
-                  className={`px-3 py-1 rounded-md font-bold transition-all ${
-                    studioViewMode === "graph"
-                      ? "bg-violet-600 text-white shadow-glow-indigo"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  ⚡ React Flow Node DAG
-                </button>
-                <button
-                  onClick={() => setStudioViewMode("blocks")}
-                  className={`px-3 py-1 rounded-md font-bold transition-all ${
-                    studioViewMode === "blocks"
-                      ? "bg-violet-600 text-white shadow-glow-indigo"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  Condition Blocks
-                </button>
-              </div>
-            </div>
-
-            {studioViewMode === "lego" ? (
-              <StrategyResearchLab
-                symbol={selectedInst.symbol}
-                onRunBacktestResult={(result) => {
-                  setBacktestResult(result);
-                }}
-              />
-            ) : studioViewMode === "graph" ? (
-              <StrategyGraphStudio
-                onCompileStrategy={handleCompileStrategy}
-                onRunBacktest={handleRunBacktest}
-              />
-            ) : (
-              <VisualStrategyBuilder
-                onCompileStrategy={handleCompileStrategy}
-                onRunBacktest={handleRunBacktest}
-              />
-            )}
+            <StrategyResearchLab
+              symbol={selectedInst.symbol}
+              onRunBacktestResult={(result) => {
+                setBacktestResult(result);
+              }}
+            />
           </div>
         )}
 

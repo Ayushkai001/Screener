@@ -7,7 +7,9 @@ export default {
   theme: {
     extend: {
       colors: {
+        electric: '#D4F638',
         lime: {
+          DEFAULT: '#D4F638',
           primary: '#D4F638',
           hover: '#C2E225',
           dim: 'rgba(212, 246, 56, 0.12)',
