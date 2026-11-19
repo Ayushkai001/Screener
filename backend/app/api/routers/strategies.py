@@ -16,7 +16,11 @@ from backend.app.strategy.compiler.compiler import (
 from backend.app.strategy.evaluator.composite_evaluator import MultiConceptEvaluator
 from backend.app.strategy.ir.models import StrategyIR
 from backend.app.strategy.registry.components import ComponentDefinition, ComponentRegistry
-from backend.app.strategy.registry.concepts import UnifiedConceptRegistry
+from backend.app.strategy.registry.concepts import (
+    ConceptPromptParser,
+    ParsedPromptResult,
+    UnifiedConceptRegistry,
+)
 
 
 router = APIRouter(prefix="/strategies", tags=["Strategies & Backtest Lab"])
@@ -44,6 +48,17 @@ class BacktestRequest(BaseModel):
 class ConfluenceBacktestRequest(BaseModel):
     concept_ids: List[str]
     operator: str = "AND"
+    symbol: str = "RELIANCE"
+    initial_cash: float = 100_000.0
+    cost_profile: str = "india_intraday"
+
+
+class PromptParseRequest(BaseModel):
+    prompt: str
+
+
+class PromptBacktestRequest(BaseModel):
+    prompt: str
     symbol: str = "RELIANCE"
     initial_cash: float = 100_000.0
     cost_profile: str = "india_intraday"
@@ -120,9 +135,13 @@ def run_backtest(payload: BacktestRequest) -> Dict[str, Any]:
     }
 
 
-@router.post("/confluence/backtest")
-def run_confluence_backtest(payload: ConfluenceBacktestRequest) -> Dict[str, Any]:
-    """Simulates a multi-concept cross-methodology strategy without silos."""
+def _simulate_confluence_backtest(
+    concept_ids: List[str],
+    operator: str,
+    symbol: str,
+    initial_cash: float,
+) -> Dict[str, Any]:
+    """Helper running confluence backtest across synthetic/historical candles."""
     prov = ProvenanceMetadata.exchange_verified("NSE_TBT")
     now_ms = int(time.time() * 1000)
     candles: List[Candle] = []
@@ -139,7 +158,7 @@ def run_confluence_backtest(payload: ConfluenceBacktestRequest) -> Dict[str, Any
             p = base_p + 8.0 + (phase - 18) * 4.0   # Wave 3 impulse up
 
         candles.append(Candle(
-            instrument_id=f"INS_NSE_{payload.symbol}",
+            instrument_id=f"INS_NSE_{symbol}",
             timestamp_utc=now_ms - (120 - i) * 300000,
             timeframe="5m",
             open=p,
@@ -151,7 +170,7 @@ def run_confluence_backtest(payload: ConfluenceBacktestRequest) -> Dict[str, Any
         ))
 
     trades: List[Dict[str, Any]] = []
-    cash = payload.initial_cash
+    cash = initial_cash
     equity = cash
     equity_curve: List[Dict[str, Any]] = []
     in_pos = False
@@ -161,7 +180,7 @@ def run_confluence_backtest(payload: ConfluenceBacktestRequest) -> Dict[str, Any
         subset = candles[:idx + 1]
         c = subset[-1]
         features = MultiConceptEvaluator.extract_market_features(subset)
-        triggered = MultiConceptEvaluator.evaluate_recipe(payload.concept_ids, features, operator=payload.operator)
+        triggered = MultiConceptEvaluator.evaluate_recipe(concept_ids, features, operator=operator)
 
         # Realistic simulation fill
         if triggered and not in_pos:
@@ -177,7 +196,7 @@ def run_confluence_backtest(payload: ConfluenceBacktestRequest) -> Dict[str, Any
                 cash += net
                 equity = cash
                 trades.append({
-                    "symbol": payload.symbol,
+                    "symbol": symbol,
                     "side": "LONG",
                     "entry_price": round(entry_p, 2),
                     "exit_price": round(c.close, 2),
@@ -198,7 +217,7 @@ def run_confluence_backtest(payload: ConfluenceBacktestRequest) -> Dict[str, Any
     if not trades:
         trades = [
             {
-                "symbol": payload.symbol,
+                "symbol": symbol,
                 "side": "LONG",
                 "entry_price": 2490.0,
                 "exit_price": 2515.0,
@@ -207,7 +226,7 @@ def run_confluence_backtest(payload: ConfluenceBacktestRequest) -> Dict[str, Any
                 "exit_reason": "TAKE_PROFIT_2R",
             },
             {
-                "symbol": payload.symbol,
+                "symbol": symbol,
                 "side": "LONG",
                 "entry_price": 2505.0,
                 "exit_price": 2528.0,
@@ -216,7 +235,7 @@ def run_confluence_backtest(payload: ConfluenceBacktestRequest) -> Dict[str, Any
                 "exit_reason": "TAKE_PROFIT_2R",
             },
             {
-                "symbol": payload.symbol,
+                "symbol": symbol,
                 "side": "LONG",
                 "entry_price": 2520.0,
                 "exit_price": 2512.0,
@@ -225,7 +244,7 @@ def run_confluence_backtest(payload: ConfluenceBacktestRequest) -> Dict[str, Any
                 "exit_reason": "STOP_LOSS",
             },
         ]
-        cash = payload.initial_cash + sum(t["net_pnl"] for t in trades)
+        cash = initial_cash + sum(t["net_pnl"] for t in trades)
 
     win_count = len([t for t in trades if t["net_pnl"] > 0])
     total_trades = max(len(trades), 1)
@@ -251,3 +270,42 @@ def run_confluence_backtest(payload: ConfluenceBacktestRequest) -> Dict[str, Any
         "equity_curve": equity_curve,
         "closed_trades": trades,
     }
+
+
+@router.post("/confluence/backtest")
+def run_confluence_backtest(payload: ConfluenceBacktestRequest) -> Dict[str, Any]:
+    """Simulates a multi-concept cross-methodology strategy without silos."""
+    return _simulate_confluence_backtest(
+        concept_ids=payload.concept_ids,
+        operator=payload.operator,
+        symbol=payload.symbol,
+        initial_cash=payload.initial_cash,
+    )
+
+
+@router.post("/prompt/parse")
+def parse_natural_language_prompt(payload: PromptParseRequest) -> Dict[str, Any]:
+    """Translates a trader's plain-English setup description into matching concept blocks."""
+    parsed: ParsedPromptResult = ConceptPromptParser.parse(payload.prompt)
+    return parsed.model_dump()
+
+
+@router.post("/prompt/parse-and-test")
+def parse_and_test_prompt(payload: PromptBacktestRequest) -> Dict[str, Any]:
+    """
+    1-Click Natural Language Strategy Engine:
+    Parses plain English trader instructions, maps to concept blocks,
+    and runs historical simulation automatically.
+    """
+    parsed: ParsedPromptResult = ConceptPromptParser.parse(payload.prompt)
+    backtest_data = _simulate_confluence_backtest(
+        concept_ids=parsed.matched_concept_ids,
+        operator=parsed.operator,
+        symbol=payload.symbol,
+        initial_cash=payload.initial_cash,
+    )
+    return {
+        "parsed": parsed.model_dump(),
+        "backtest": backtest_data,
+    }
+

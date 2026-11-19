@@ -341,3 +341,145 @@ class UnifiedConceptRegistry:
             if c.concept_id == concept_id:
                 return c
         return None
+
+
+class ParsedPromptResult(BaseModel):
+    original_prompt: str
+    matched_concept_ids: List[str]
+    matched_concepts: List[ConceptBlock]
+    operator: str = "AND"
+    side: str = "BUY"
+    confidence: float = 1.0
+    plain_english_summary: str
+
+
+class ConceptPromptParser:
+    """
+    Translates free-form natural language trader instructions into
+    modular ConceptBlocks with zero friction.
+    """
+
+    KEYWORD_MAPPINGS: Dict[str, List[str]] = {
+        "elliott_wave_3_breakout": [
+            "wave 3", "wave three", "wave3", "elliott wave 3", "elliott wave",
+            "elliott", "impulse wave", "motive wave", "impulse breakout", "third wave",
+        ],
+        "elliott_wave_4_pullback": [
+            "wave 4", "wave four", "wave4", "wave 4 pullback", "shallow pullback",
+        ],
+        "smc_fair_value_gap": [
+            "fvg", "fair value gap", "fair-value gap", "imbalance gap", "liquidity void", "value gap",
+        ],
+        "smc_bos_breakout": [
+            "bos", "break of structure", "market structure break", "msb", "structure break", "structure breakout",
+        ],
+        "smc_choch_reversal": [
+            "choch", "change of character", "character change", "market structure shift", "mss", "trend flip",
+        ],
+        "ict_silver_bullet": [
+            "silver bullet", "silverbullet", "10am", "10:00", "11:00", "ny am",
+            "london open", "killzone", "kill zone",
+        ],
+        "ict_liquidity_sweep": [
+            "liquidity sweep", "ssl", "bsl", "stop hunt", "sweep", "liquidity grab",
+            "swept low", "swept high", "run on stops", "sweep rejection",
+        ],
+        "ict_discount_zone": [
+            "discount", "discount zone", "wholesale", "below 50%", "cheap zone",
+        ],
+        "ict_ote_entry": [
+            "ote", "optimal trade entry", "62%", "70.5%", "79%", "62-79%", "ote zone",
+        ],
+        "wyckoff_spring": [
+            "wyckoff spring", "spring", "spring shakeout", "phase c", "shakeout", "washout", "bear trap", "wyckoff",
+        ],
+        "wyckoff_sign_of_strength": [
+            "sign of strength", "sos", "sign-of-strength", "markup", "creek jump",
+        ],
+        "fib_golden_pocket": [
+            "golden pocket", "61.8", "61.8%", "0.618", "78.6", "78.6%", "fibonacci",
+            "fib", "golden ratio", "fib retrace", "fibonacci retracement",
+        ],
+        "fib_50_equilibrium": [
+            "50%", "equilibrium", "halfway", "50 percent", "50% bounce", "0.50",
+        ],
+        "footprint_buy_imbalance": [
+            "footprint", "imbalance", "buy imbalance", "3:1", "diagonal imbalance",
+            "stacked imbalance", "aggressive buying", "orderflow imbalance",
+        ],
+        "volume_profile_poc_retest": [
+            "poc", "point of control", "poc retest", "poc bounce", "poc support",
+        ],
+        "volume_profile_val_bounce": [
+            "val", "value area low", "val bounce", "val support", "value area",
+        ],
+        "cvd_absorption_divergence": [
+            "delta absorption", "cvd absorption", "absorption", "delta divergence",
+            "cvd divergence", "passive absorption", "cvd",
+        ],
+        "candlestick_hammer_pin_bar": [
+            "hammer", "pin bar", "pinbar", "rejection wick", "hammer candle", "long lower wick",
+        ],
+        "candlestick_bullish_engulfing": [
+            "engulfing", "bullish engulfing", "engulfing candle", "giant green candle",
+        ],
+        "harmonic_gartley_bullish": [
+            "gartley", "harmonic", "harmonic pattern", "bat pattern", "butterfly",
+        ],
+        "indicator_rsi_oversold": [
+            "rsi", "rsi oversold", "oversold", "rsi < 30", "rsi below 30",
+        ],
+        "indicator_ema_crossover": [
+            "ema cross", "ema crossover", "golden cross", "ema 20", "moving average",
+            "ema trend", "ema", "moving average crossover",
+        ],
+    }
+
+    @classmethod
+    def parse(cls, prompt: str) -> ParsedPromptResult:
+        """
+        Parses a natural language prompt string into matching ConceptBlocks.
+        """
+        clean_text = prompt.lower().strip()
+        matched_ids: List[str] = []
+
+        # Detect operator: " or " or "either" means OR; default is AND
+        operator = "OR" if (" or " in f" {clean_text} " or "either" in clean_text) else "AND"
+
+        # Detect side: "sell" or "short" means SELL; default is BUY
+        side = "SELL" if ("sell" in clean_text or "short" in clean_text) else "BUY"
+
+        # Check keyword mappings (prefer longer specific phrases first)
+        for concept_id, keywords in cls.KEYWORD_MAPPINGS.items():
+            for kw in sorted(keywords, key=len, reverse=True):
+                if kw in clean_text:
+                    if concept_id not in matched_ids:
+                        matched_ids.append(concept_id)
+                    break
+
+        # Fallback if no keywords matched: use classic Trend + Fib confirmation
+        if not matched_ids:
+            matched_ids = ["elliott_wave_3_breakout", "fib_golden_pocket"]
+
+        matched_blocks = [
+            b for b in [UnifiedConceptRegistry.find_concept(cid) for cid in matched_ids]
+            if b is not None
+        ]
+
+        # Build plain-English summary
+        names = [f"{b.friendly_icon} {b.name}" for b in matched_blocks]
+        if operator == "AND":
+            summary = f"{side} when ALL of the following occur: " + " + ".join(names)
+        else:
+            summary = f"{side} when ANY of the following occurs: " + " OR ".join(names)
+
+        return ParsedPromptResult(
+            original_prompt=prompt,
+            matched_concept_ids=matched_ids,
+            matched_concepts=matched_blocks,
+            operator=operator,
+            side=side,
+            confidence=1.0 if len(matched_blocks) > 0 else 0.8,
+            plain_english_summary=summary,
+        )
+

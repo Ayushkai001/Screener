@@ -18,3 +18,13 @@ export interface ConfluenceRecipe {
   risk_reward: string;
   win_rate_benchmark: string;
 }
+
+export interface ParsedPromptResult {
+  original_prompt: string;
+  matched_concept_ids: string[];
+  matched_concepts: ConceptBlock[];
+  operator: string;
+  side: string;
+  confidence: number;
+  plain_english_summary: string;
+}
