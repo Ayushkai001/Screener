@@ -249,8 +249,8 @@ const SAMPLE_PROFILE: VolumeProfile = {
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
-    "explorer" | "orderflow" | "studio" | "backtest" | "paper"
-  >("orderflow");
+    "studio" | "paper" | "explorer" | "orderflow" | "backtest"
+  >("studio");
 
   const [footprintViewMode, setFootprintViewMode] = useState<"canvas" | "table">("canvas");
   const [studioViewMode, setStudioViewMode] = useState<"lego" | "graph" | "blocks">("lego");
@@ -548,7 +548,7 @@ export const App: React.FC = () => {
 
         {/* Global Controls & Provenance Monitor */}
         <div className="flex items-center gap-2.5">
-          {/* Live Streaming Feed Simulator Toggle */}
+          {/* Live Streaming Feed Simulator Toggle (Commented out for simplified view)
           <button
             onClick={toggleSimulation}
             className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
@@ -559,6 +559,7 @@ export const App: React.FC = () => {
           >
             <span>{isSimulating ? "⏹ Stop Feed" : "▶ Live Stream"}</span>
           </button>
+          */}
 
           {/* WebSocket Ping Badge */}
           <div className="hidden sm:flex bg-obsidian-950 border border-slate-800 rounded-lg px-2.5 py-1 text-[11px] font-mono items-center gap-2">
@@ -574,7 +575,7 @@ export const App: React.FC = () => {
             <span className="text-cyan-400 font-bold">{tickCount} Ticks</span>
           </div>
 
-          {/* Interactive Provenance Badge */}
+          {/* Interactive Provenance Badge (Commented out for simplified view)
           <button
             onClick={() => setShowProvenanceModal(true)}
             className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-mono font-semibold text-emerald-300 flex items-center gap-1.5 hover:bg-emerald-500/20 transition-all cursor-pointer shadow-glow-emerald"
@@ -582,6 +583,7 @@ export const App: React.FC = () => {
           >
             <span>✓ Genuine Level A</span>
           </button>
+          */}
         </div>
       </header>
 
@@ -589,11 +591,11 @@ export const App: React.FC = () => {
       <nav className="border-b border-slate-800/80 bg-obsidian-900/40 px-5 py-2 flex items-center justify-between text-xs">
         <div className="flex items-center gap-1.5">
           {[
-            { id: "explorer", label: "01 · Market Explorer", icon: "🌐" },
-            { id: "orderflow", label: "02 · Order Flow Lab", icon: "📊" },
-            { id: "studio", label: "03 · Strategy Studio", icon: "⚡" },
-            { id: "backtest", label: "04 · Backtest Lab", icon: "🧪" },
-            { id: "paper", label: "05 · Paper Desk", icon: "💼" },
+            // { id: "explorer", label: "01 · Market Explorer", icon: "🌐" },
+            // { id: "orderflow", label: "02 · Order Flow Lab", icon: "📊" },
+            { id: "studio", label: "01 · Customizable Strategy Builder & Backtest", icon: "🧩" },
+            // { id: "backtest", label: "04 · Backtest Lab", icon: "🧪" },
+            { id: "paper", label: "02 · Paper Trading Desk", icon: "💼" },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -634,22 +636,22 @@ export const App: React.FC = () => {
 
       {/* Main Workspace Body */}
       <main className="flex-1 p-5 max-w-7xl mx-auto w-full flex flex-col gap-6">
-        {/* Tab 01: Market Explorer */}
-        {activeTab === "explorer" && (
+        {/* Tab 01: Market Explorer (Commented out for simplified view)
+        {activeTab === ("explorer" as any) && (
           <MarketExplorer
             instruments={DEFAULT_INSTRUMENTS}
             selectedInstrumentId={selectedInst.instrument_id}
             onSelectInstrument={(inst) => {
               setSelectedInst(inst);
-              setActiveTab("orderflow");
+              setActiveTab("orderflow" as any);
             }}
           />
         )}
+        */}
 
-        {/* Tab 02: Order Flow Lab */}
-        {activeTab === "orderflow" && (
+        {/* Tab 02: Order Flow Lab (Commented out for simplified view)
+        {activeTab === ("orderflow" as any) && (
           <div className="flex flex-col gap-6">
-            {/* View Mode Ribbon */}
             <div className="flex flex-wrap items-center justify-between gap-3 bg-obsidian-900 border border-slate-800/90 rounded-xl p-3 shadow-xl backdrop-blur">
               <div className="flex items-center gap-3">
                 <span className="text-xs font-bold text-white flex items-center gap-2">
@@ -680,7 +682,6 @@ export const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* Order Flow Metric Badges */}
               <div className="flex items-center gap-2 font-mono text-xs">
                 <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
                   ⚡ 3:1 Buy Imbalance
@@ -694,7 +695,6 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Footprint Chart Surface */}
             {footprintViewMode === "canvas" ? (
               <CanvasFootprintChart
                 bars={footprintBars}
@@ -709,12 +709,12 @@ export const App: React.FC = () => {
               />
             )}
 
-            {/* Volume Profile Matrix */}
             <VolumeProfileView profile={SAMPLE_PROFILE} />
           </div>
         )}
+        */}
 
-        {/* Tab 03: Strategy Studio */}
+        {/* Tab 01 (Active): Customizable Strategy Builder & Backtest Lab */}
         {activeTab === "studio" && (
           <div className="flex flex-col gap-6">
             {/* Studio Mode Toggle */}
@@ -778,8 +778,8 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* Tab 04: Backtest Lab */}
-        {activeTab === "backtest" && (
+        {/* Tab 04: Backtest Lab (Commented out for simplified view - backtest results are integrated into Strategy Studio)
+        {activeTab === ("backtest" as any) && (
           <div className="bg-obsidian-900 border border-slate-800/90 rounded-xl p-5 shadow-2xl flex flex-col gap-6 backdrop-blur">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
               <div>
@@ -798,7 +798,6 @@ export const App: React.FC = () => {
 
             {backtestResult ? (
               <div className="flex flex-col gap-6">
-                {/* Metrics KPI Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 font-mono text-xs">
                   <div className="bg-obsidian-950 p-3 rounded-lg border border-slate-800">
                     <span className="text-slate-500 text-[10px] block uppercase font-semibold">Net Realized PnL</span>
@@ -832,7 +831,6 @@ export const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* SVG Equity Curve */}
                 <div className="bg-obsidian-950 border border-slate-800 rounded-xl p-4 flex flex-col gap-2">
                   <div className="flex items-center justify-between text-xs font-mono text-slate-400">
                     <span className="font-bold text-white uppercase tracking-wider">Simulated Portfolio Equity Curve</span>
@@ -861,7 +859,6 @@ export const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Closed Trades Blotter */}
                 <div className="flex flex-col gap-2">
                   <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
                     Simulated Closed Trades ({backtestResult.closed_trades.length})
@@ -911,8 +908,9 @@ export const App: React.FC = () => {
             )}
           </div>
         )}
+        */}
 
-        {/* Tab 05: Paper Trading */}
+        {/* Tab 02 (Active): Paper Trading */}
         {activeTab === "paper" && (
           <PaperTradingDashboard
             account={paperAccount}
@@ -940,7 +938,7 @@ export const App: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-4">
-          <span>Shortcuts: <kbd className="px-1 py-0.5 rounded bg-obsidian-950 border border-slate-800 text-slate-300">1-5</kbd> Tabs • <kbd className="px-1 py-0.5 rounded bg-obsidian-950 border border-slate-800 text-slate-300">Shift+Wheel</kbd> Bar Width</span>
+          <span>Shortcuts: <kbd className="px-1 py-0.5 rounded bg-obsidian-950 border border-slate-800 text-slate-300">1-2</kbd> Tabs</span>
           <span className="text-slate-600">|</span>
           <span className="text-indigo-400">STRATLAB WORKSTATION v2.0</span>
         </div>
