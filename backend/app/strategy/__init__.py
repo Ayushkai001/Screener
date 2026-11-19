@@ -1,0 +1,63 @@
+"""STRATLAB Strategy Subsystem: IR, Registry, and Compiler."""
+
+from backend.app.strategy.ir.models import (
+    ActionKind,
+    ActionNode,
+    ComparisonOperator,
+    ConditionGroup,
+    ConditionNode,
+    ExecutionParams,
+    LogicalOp,
+    Operand,
+    OperandKind,
+    OrderType,
+    PortfolioParams,
+    RiskParams,
+    SizingMethod,
+    StopLossConfig,
+    StrategyIR,
+    TakeProfitConfig,
+    TrailingStopConfig,
+    UniverseConfig,
+)
+from backend.app.strategy.registry.components import (
+    ComponentDefinition,
+    ComponentRegistry,
+    ParameterDefinition,
+)
+from backend.app.strategy.compiler.compiler import (
+    CompiledStrategy,
+    EvaluationContext,
+    ProvenanceIncompatibilityError,
+    StrategyCompilationError,
+    StrategyCompiler,
+)
+
+__all__ = [
+    "ActionKind",
+    "ActionNode",
+    "ComparisonOperator",
+    "ConditionGroup",
+    "ConditionNode",
+    "ExecutionParams",
+    "LogicalOp",
+    "Operand",
+    "OperandKind",
+    "OrderType",
+    "PortfolioParams",
+    "RiskParams",
+    "SizingMethod",
+    "StopLossConfig",
+    "StrategyIR",
+    "TakeProfitConfig",
+    "TrailingStopConfig",
+    "UniverseConfig",
+    "ComponentDefinition",
+    "ComponentRegistry",
+    "ParameterDefinition",
+    "CompiledStrategy",
+    "EvaluationContext",
+    "ProvenanceIncompatibilityError",
+    "StrategyCompilationError",
+    "StrategyCompiler",
+]
