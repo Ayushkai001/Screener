@@ -3,3 +3,9 @@ __pycache__/
 *.pyc
 data/
 results/
+
+# Frontend dependencies and production build outputs
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.DS_Store

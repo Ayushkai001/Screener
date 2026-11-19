@@ -88,7 +88,9 @@ export const CanvasFootprintChart: React.FC<CanvasFootprintChartProps> = ({
     const { barWidth, cellHeight, panX, panY } = viewport;
 
     // Reference price for vertical coordinates (midpoint of all bars)
-    const allPrices = bars.flatMap((b) => b.clusters.map((c) => c.price));
+    const allPrices = bars.flatMap((b) =>
+      (Array.isArray(b.clusters) ? b.clusters : Object.values(b.clusters)).map((c) => c.price)
+    );
     const refPrice = allPrices.length > 0 ? (Math.max(...allPrices) + Math.min(...allPrices)) / 2 : 2500.0;
 
     const priceToY = (price: number): number => {
@@ -143,8 +145,10 @@ export const CanvasFootprintChart: React.FC<CanvasFootprintChartProps> = ({
       ctx.stroke();
 
       // Draw 70% Value Area Box Bracket
-      const vahY = priceToY(bar.value_area_high);
-      const valY = priceToY(bar.value_area_low);
+      const vah = bar.vah ?? bar.value_area_high ?? bar.high;
+      const val = bar.val ?? bar.value_area_low ?? bar.low;
+      const vahY = priceToY(vah);
+      const valY = priceToY(val);
       ctx.fillStyle = "rgba(99, 102, 241, 0.05)"; // subtle indigo tint
       ctx.fillRect(barX + 2, vahY, barWidth - 4, Math.abs(valY - vahY));
       ctx.strokeStyle = "rgba(99, 102, 241, 0.35)";
@@ -153,7 +157,8 @@ export const CanvasFootprintChart: React.FC<CanvasFootprintChartProps> = ({
       ctx.setLineDash([]); // Reset dashed lines
 
       // Sort clusters descending by price (top to bottom)
-      const sortedClusters = [...bar.clusters].sort((a, b) => b.price - a.price);
+      const clusterList: PriceCluster[] = Array.isArray(bar.clusters) ? bar.clusters : Object.values(bar.clusters);
+      const sortedClusters = [...clusterList].sort((a, b) => b.price - a.price);
 
       sortedClusters.forEach((cluster) => {
         const cellY = priceToY(cluster.price) - cellHeight / 2;
@@ -161,7 +166,11 @@ export const CanvasFootprintChart: React.FC<CanvasFootprintChartProps> = ({
         const cellX = barX + 4;
         const halfW = cellW / 2;
 
-        const isPoc = Math.abs(cluster.price - bar.poc_price) < 1e-4;
+        const isPoc = bar.poc_price ? Math.abs(cluster.price - bar.poc_price) < 1e-4 : false;
+        const isBuyImbalance = cluster.imbalance_buy ?? cluster.is_buy_imbalance ?? false;
+        const isSellImbalance = cluster.imbalance_sell ?? cluster.is_sell_imbalance ?? false;
+        const bidVal = cluster.bid_vol ?? cluster.bid_volume ?? 0;
+        const askVal = cluster.ask_vol ?? cluster.ask_volume ?? 0;
 
         // Base cell background
         ctx.fillStyle = isPoc ? "rgba(245, 158, 11, 0.15)" : "rgba(15, 23, 42, 0.8)";
@@ -169,13 +178,13 @@ export const CanvasFootprintChart: React.FC<CanvasFootprintChartProps> = ({
 
         // Highlight Diagonal Imbalances:
         // Buy Imbalance: Ask volume > 3x lower-bid -> right cell highlight
-        if (cluster.is_buy_imbalance) {
+        if (isBuyImbalance) {
           ctx.fillStyle = "rgba(16, 185, 129, 0.35)";
           ctx.fillRect(cellX + halfW, cellY, halfW, cellHeight - 1);
         }
 
         // Sell Imbalance: Bid volume > 3x higher-ask -> left cell highlight
-        if (cluster.is_sell_imbalance) {
+        if (isSellImbalance) {
           ctx.fillStyle = "rgba(244, 63, 94, 0.35)";
           ctx.fillRect(cellX, cellY, halfW, cellHeight - 1);
         }
@@ -192,10 +201,10 @@ export const CanvasFootprintChart: React.FC<CanvasFootprintChartProps> = ({
         }
 
         // Render Bid Volume (Left half)
-        ctx.font = cluster.is_sell_imbalance ? "bold 10px monospace" : "10px monospace";
-        ctx.fillStyle = cluster.is_sell_imbalance ? "#fda4af" : "#94a3b8";
+        ctx.font = isSellImbalance ? "bold 10px monospace" : "10px monospace";
+        ctx.fillStyle = isSellImbalance ? "#fda4af" : "#94a3b8";
         ctx.textAlign = "right";
-        ctx.fillText(cluster.bid_volume.toString(), cellX + halfW - 6, cellY + cellHeight / 2 + 3);
+        ctx.fillText(bidVal.toString(), cellX + halfW - 6, cellY + cellHeight / 2 + 3);
 
         // Center Divider Line
         ctx.strokeStyle = "rgba(51, 65, 85, 0.5)";
@@ -206,10 +215,10 @@ export const CanvasFootprintChart: React.FC<CanvasFootprintChartProps> = ({
         ctx.stroke();
 
         // Render Ask Volume (Right half)
-        ctx.font = cluster.is_buy_imbalance ? "bold 10px monospace" : "10px monospace";
-        ctx.fillStyle = cluster.is_buy_imbalance ? "#6ee7b7" : "#cbd5e1";
+        ctx.font = isBuyImbalance ? "bold 10px monospace" : "10px monospace";
+        ctx.fillStyle = isBuyImbalance ? "#6ee7b7" : "#cbd5e1";
         ctx.textAlign = "left";
-        ctx.fillText(cluster.ask_volume.toString(), cellX + halfW + 6, cellY + cellHeight / 2 + 3);
+        ctx.fillText(askVal.toString(), cellX + halfW + 6, cellY + cellHeight / 2 + 3);
       });
 
       // Bottom Bar Metrics Strip (Delta, Volume, Time)
@@ -232,7 +241,8 @@ export const CanvasFootprintChart: React.FC<CanvasFootprintChartProps> = ({
       ctx.fillText(`Vol: ${bar.volume}`, barCenter, footerY + 26);
 
       // Time
-      const timeStr = new Date(bar.timestamp_utc).toLocaleTimeString([], {
+      const barTs = bar.timestamp_utc || bar.open_time_utc || Date.now();
+      const timeStr = new Date(barTs).toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
       });
@@ -348,17 +358,24 @@ export const CanvasFootprintChart: React.FC<CanvasFootprintChartProps> = ({
     } else {
       // Hover hit-testing
       const { barWidth, cellHeight, panX, panY } = viewport;
-      const allPrices = bars.flatMap((b) => b.clusters.map((c) => c.price));
+      const allPrices = bars.flatMap((b) =>
+        (Array.isArray(b.clusters) ? b.clusters : Object.values(b.clusters)).map((c) => c.price)
+      );
       const refPrice = allPrices.length > 0 ? (Math.max(...allPrices) + Math.min(...allPrices)) / 2 : 2500.0;
       const hoveredPrice = refPrice - ((mouseY - panY) / cellHeight) * tickSize;
       const hoveredBarIdx = Math.floor((mouseX - panX) / barWidth);
 
       if (hoveredBarIdx >= 0 && hoveredBarIdx < bars.length) {
         const targetBar = bars[hoveredBarIdx];
+        const clusterList: PriceCluster[] = Array.isArray(targetBar.clusters)
+          ? targetBar.clusters
+          : Object.values(targetBar.clusters);
         // Find closest cluster
-        const closestCluster = targetBar.clusters.reduce((prev, curr) =>
-          Math.abs(curr.price - hoveredPrice) < Math.abs(prev.price - hoveredPrice) ? curr : prev
-        , targetBar.clusters[0]);
+        const closestCluster = clusterList.length > 0
+          ? clusterList.reduce((prev, curr) =>
+              Math.abs(curr.price - hoveredPrice) < Math.abs(prev.price - hoveredPrice) ? curr : prev
+            , clusterList[0])
+          : undefined;
 
         setHoverInfo({
           barIndex: hoveredBarIdx,
@@ -477,22 +494,22 @@ export const CanvasFootprintChart: React.FC<CanvasFootprintChartProps> = ({
             </div>
             <div className="flex justify-between text-slate-400">
               <span>Bid Volume:</span>
-              <span className="text-rose-300 font-semibold">{hoverInfo.cluster.bid_volume}</span>
+              <span className="text-rose-300 font-semibold">{hoverInfo.cluster.bid_vol ?? hoverInfo.cluster.bid_volume ?? 0}</span>
             </div>
             <div className="flex justify-between text-slate-400">
               <span>Ask Volume:</span>
-              <span className="text-emerald-300 font-semibold">{hoverInfo.cluster.ask_volume}</span>
+              <span className="text-emerald-300 font-semibold">{hoverInfo.cluster.ask_vol ?? hoverInfo.cluster.ask_volume ?? 0}</span>
             </div>
             <div className="flex justify-between text-slate-400">
               <span>Total Cluster Vol:</span>
-              <span className="text-slate-200">{hoverInfo.cluster.total_volume}</span>
+              <span className="text-slate-200">{hoverInfo.cluster.total_vol ?? hoverInfo.cluster.total_volume ?? 0}</span>
             </div>
-            {hoverInfo.cluster.is_buy_imbalance && (
+            {(hoverInfo.cluster.imbalance_buy || hoverInfo.cluster.is_buy_imbalance) && (
               <div className="mt-0.5 text-center px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded text-[10px] font-bold">
                 ⚡ 3:1 Buy Imbalance
               </div>
             )}
-            {hoverInfo.cluster.is_sell_imbalance && (
+            {(hoverInfo.cluster.imbalance_sell || hoverInfo.cluster.is_sell_imbalance) && (
               <div className="mt-0.5 text-center px-1.5 py-0.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded text-[10px] font-bold">
                 ⚡ 3:1 Sell Imbalance
               </div>

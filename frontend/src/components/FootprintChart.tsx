@@ -59,16 +59,20 @@ export const FootprintChart: React.FC<FootprintChartProps> = ({
       <div className="overflow-x-auto pb-4">
         <div className="inline-flex gap-4 min-w-full justify-start items-end py-2">
           {bars.map((bar, barIdx) => {
-            const isBullish = bar.close >= bar.open;
+            const clusterList: PriceCluster[] = Array.isArray(bar.clusters)
+              ? bar.clusters
+              : Object.values(bar.clusters);
+            const barTs = bar.timestamp_utc || bar.open_time_utc || Date.now();
+
             return (
               <div
-                key={bar.timestamp_utc}
+                key={String(barTs) + '-' + barIdx}
                 className="flex flex-col items-center min-w-[140px] bg-slate-950/50 border border-slate-800/80 rounded-lg p-2"
               >
                 {/* Candle Header: Time & Delta */}
                 <div className="w-full text-center pb-2 border-b border-slate-800/60">
                   <span className="text-[10px] text-slate-400 font-mono">
-                    {new Date(bar.timestamp_utc).toLocaleTimeString([], {
+                    {new Date(barTs).toLocaleTimeString([], {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
@@ -84,11 +88,12 @@ export const FootprintChart: React.FC<FootprintChartProps> = ({
 
                 {/* Price Cluster Rows (Highest to Lowest) */}
                 <div className="w-full flex flex-col gap-0.5 my-2">
-                  {bar.clusters.map((cluster) => {
-                    const isPoc = Math.abs(cluster.price - bar.poc_price) < 1e-4;
-                    const deltaPositive = cluster.delta >= 0;
-                    const isBuyImbalance = cluster.is_buy_imbalance;
-                    const isSellImbalance = cluster.is_sell_imbalance;
+                  {clusterList.map((cluster) => {
+                    const isPoc = bar.poc_price ? Math.abs(cluster.price - bar.poc_price) < 1e-4 : false;
+                    const isBuyImbalance = cluster.imbalance_buy ?? cluster.is_buy_imbalance ?? false;
+                    const isSellImbalance = cluster.imbalance_sell ?? cluster.is_sell_imbalance ?? false;
+                    const bidVal = cluster.bid_vol ?? cluster.bid_volume ?? 0;
+                    const askVal = cluster.ask_vol ?? cluster.ask_volume ?? 0;
 
                     return (
                       <div
@@ -111,7 +116,7 @@ export const FootprintChart: React.FC<FootprintChartProps> = ({
                               : "text-slate-400"
                           }`}
                         >
-                          {cluster.bid_volume}
+                          {bidVal}
                         </span>
 
                         {/* Price Node */}
@@ -127,7 +132,7 @@ export const FootprintChart: React.FC<FootprintChartProps> = ({
                               : "text-slate-400"
                           }`}
                         >
-                          {cluster.ask_volume}
+                          {askVal}
                         </span>
                       </div>
                     );
@@ -137,7 +142,7 @@ export const FootprintChart: React.FC<FootprintChartProps> = ({
                 {/* Footer: Volume & Price Boundaries */}
                 <div className="w-full pt-1.5 border-t border-slate-800/60 text-[10px] text-slate-400 flex justify-between font-mono">
                   <span>Tot: {bar.volume}</span>
-                  <span className="text-amber-400">POC: {bar.poc_price.toFixed(1)}</span>
+                  <span className="text-amber-400">POC: {bar.poc_price ? bar.poc_price.toFixed(1) : "-"}</span>
                 </div>
               </div>
             );
@@ -156,11 +161,11 @@ export const FootprintChart: React.FC<FootprintChartProps> = ({
           </div>
           <div>
             <span className="text-slate-500">Bid: </span>
-            <span className="text-rose-400">{hoveredCluster.cluster.bid_volume}</span>
+            <span className="text-rose-400">{hoveredCluster.cluster.bid_vol ?? hoveredCluster.cluster.bid_volume ?? 0}</span>
           </div>
           <div>
             <span className="text-slate-500">Ask: </span>
-            <span className="text-emerald-400">{hoveredCluster.cluster.ask_volume}</span>
+            <span className="text-emerald-400">{hoveredCluster.cluster.ask_vol ?? hoveredCluster.cluster.ask_volume ?? 0}</span>
           </div>
           <div>
             <span className="text-slate-500">Delta: </span>
@@ -172,12 +177,12 @@ export const FootprintChart: React.FC<FootprintChartProps> = ({
               {hoveredCluster.cluster.delta}
             </span>
           </div>
-          {hoveredCluster.cluster.is_buy_imbalance && (
+          {(hoveredCluster.cluster.imbalance_buy || hoveredCluster.cluster.is_buy_imbalance) && (
             <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
               ⚡ Buy Imbalance (3:1)
             </span>
           )}
-          {hoveredCluster.cluster.is_sell_imbalance && (
+          {(hoveredCluster.cluster.imbalance_sell || hoveredCluster.cluster.is_sell_imbalance) && (
             <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">
               ⚡ Sell Imbalance (3:1)
             </span>

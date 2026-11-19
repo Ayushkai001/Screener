@@ -2,6 +2,7 @@
   "name": "stratlab-frontend",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "STRATLAB: Unified Trading Engine, Order Flow Lab, and Strategy Studio UI",
   "scripts": {
     "dev": "vite",

@@ -100,41 +100,51 @@ export interface OrderBookDepth {
 // ---------------------------------------------------------------- Order Flow
 export interface PriceCluster {
   price: number;
-  bid_vol: number;
-  ask_vol: number;
-  total_vol: number;
+  bid_vol?: number;
+  ask_vol?: number;
+  total_vol?: number;
   delta: number;
-  trade_count: number;
-  imbalance_buy: boolean;
-  imbalance_sell: boolean;
-  is_poc: boolean;
-  provenance: ProvenanceMetadata;
+  trade_count?: number;
+  imbalance_buy?: boolean;
+  imbalance_sell?: boolean;
+  is_poc?: boolean;
+  provenance?: ProvenanceMetadata;
+  // Aliases
+  bid_volume?: number;
+  ask_volume?: number;
+  total_volume?: number;
+  delta_pct?: number;
+  is_buy_imbalance?: boolean;
+  is_sell_imbalance?: boolean;
 }
 
 export interface FootprintBar {
   instrument_id: string;
   timeframe: string;
-  open_time_utc: number;
-  close_time_utc: number;
+  open_time_utc?: number;
+  close_time_utc?: number;
+  timestamp_utc?: string | number;
   open: number;
   high: number;
   low: number;
   close: number;
   volume: number;
-  turnover: number;
+  turnover?: number;
   delta: number;
-  cum_delta: number;
-  delta_min: number;
-  delta_max: number;
-  delta_finish: number;
-  clusters: Record<number, PriceCluster>;
-  poc_price: number;
-  vah: number;
-  val: number;
-  stacked_buy_imbalances: number[];
-  stacked_sell_imbalances: number[];
-  unfinished_high: boolean;
-  unfinished_low: boolean;
+  cum_delta?: number;
+  delta_min?: number;
+  delta_max?: number;
+  delta_finish?: number;
+  clusters: Record<number, PriceCluster> | PriceCluster[];
+  poc_price?: number;
+  vah?: number;
+  val?: number;
+  value_area_high?: number;
+  value_area_low?: number;
+  stacked_buy_imbalances?: number[];
+  stacked_sell_imbalances?: number[];
+  unfinished_high?: boolean;
+  unfinished_low?: boolean;
   provenance: ProvenanceMetadata;
 }
 
@@ -145,7 +155,7 @@ export interface VolumeProfile {
   start_time_utc: number;
   end_time_utc: number;
   tick_size: number;
-  bins: Record<number, number>;
+  bins: Record<string | number, number>;
   total_volume: number;
   poc_price: number;
   poc_volume: number;

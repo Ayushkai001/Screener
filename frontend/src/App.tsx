@@ -325,6 +325,7 @@ export const App: React.FC = () => {
       side: orderData.side || "BUY",
       order_type: orderData.order_type || "LIMIT",
       quantity: orderData.quantity || 50,
+      filled_quantity: orderData.quantity || 50,
       price: orderData.price || 2502.0,
       status: "FILLED",
       queue_ahead_volume: 0,
@@ -665,3 +666,5 @@ export const App: React.FC = () => {
     </div>
   );
 };
+
+export default App;
