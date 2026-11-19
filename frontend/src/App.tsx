@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { CanvasFootprintChart } from "./components/CanvasFootprintChart";
 import { FootprintChart } from "./components/FootprintChart";
 import { MarketExplorer } from "./components/MarketExplorer";
 import { PaperTradingDashboard } from "./components/PaperTradingDashboard";
@@ -55,7 +56,29 @@ const DEFAULT_INSTRUMENTS: InstrumentMaster[] = [
 const SAMPLE_FOOTPRINT_BARS: FootprintBar[] = [
   {
     instrument_id: "INS_NSE_RELIANCE",
-    timestamp_utc: Date.now() - 600000,
+    timestamp_utc: Date.now() - 1500000,
+    timeframe: "5m",
+    open: 2499.0,
+    high: 2502.5,
+    low: 2498.0,
+    close: 2502.0,
+    volume: 1420,
+    delta: 220,
+    poc_price: 2501.0,
+    value_area_high: 2502.0,
+    value_area_low: 2500.0,
+    clusters: [
+      { price: 2502.5, bid_volume: 30, ask_volume: 140, total_volume: 170, delta: 110, delta_pct: 64.7, is_buy_imbalance: true, is_sell_imbalance: false },
+      { price: 2502.0, bid_volume: 80, ask_volume: 290, total_volume: 370, delta: 210, delta_pct: 56.7, is_buy_imbalance: true, is_sell_imbalance: false },
+      { price: 2501.0, bid_volume: 220, ask_volume: 250, total_volume: 470, delta: 30, delta_pct: 6.3, is_buy_imbalance: false, is_sell_imbalance: false },
+      { price: 2500.0, bid_volume: 180, ask_volume: 90, total_volume: 270, delta: -90, delta_pct: -33.3, is_buy_imbalance: false, is_sell_imbalance: false },
+      { price: 2499.0, bid_volume: 90, ask_volume: 50, total_volume: 140, delta: -40, delta_pct: -28.5, is_buy_imbalance: false, is_sell_imbalance: false },
+    ],
+    provenance: { quality: DataQuality.LEVEL_A_EXCHANGE_VERIFIED, side_method: "EXCHANGE_FLAG", source_id: "NSE_TBT", confidence: 1.0, is_estimated: false },
+  },
+  {
+    instrument_id: "INS_NSE_RELIANCE",
+    timestamp_utc: Date.now() - 1200000,
     timeframe: "5m",
     open: 2502.0,
     high: 2505.0,
@@ -67,54 +90,79 @@ const SAMPLE_FOOTPRINT_BARS: FootprintBar[] = [
     value_area_high: 2504.5,
     value_area_low: 2502.0,
     clusters: [
-      {
-        price: 2505.0,
-        bid_volume: 40,
-        ask_volume: 190,
-        total_volume: 230,
-        delta: 150,
-        delta_pct: 65.2,
-        is_buy_imbalance: true,
-        is_sell_imbalance: false,
-      },
-      {
-        price: 2504.0,
-        bid_volume: 120,
-        ask_volume: 380,
-        total_volume: 500,
-        delta: 260,
-        delta_pct: 52.0,
-        is_buy_imbalance: true,
-        is_sell_imbalance: false,
-      },
-      {
-        price: 2503.0,
-        bid_volume: 350,
-        ask_volume: 370,
-        total_volume: 720,
-        delta: 20,
-        delta_pct: 2.7,
-        is_buy_imbalance: false,
-        is_sell_imbalance: false,
-      },
-      {
-        price: 2502.0,
-        bid_volume: 240,
-        ask_volume: 150,
-        total_volume: 390,
-        delta: -90,
-        delta_pct: -23.0,
-        is_buy_imbalance: false,
-        is_sell_imbalance: false,
-      },
+      { price: 2505.0, bid_volume: 40, ask_volume: 190, total_volume: 230, delta: 150, delta_pct: 65.2, is_buy_imbalance: true, is_sell_imbalance: false },
+      { price: 2504.0, bid_volume: 120, ask_volume: 380, total_volume: 500, delta: 260, delta_pct: 52.0, is_buy_imbalance: true, is_sell_imbalance: false },
+      { price: 2503.0, bid_volume: 350, ask_volume: 370, total_volume: 720, delta: 20, delta_pct: 2.7, is_buy_imbalance: false, is_sell_imbalance: false },
+      { price: 2502.0, bid_volume: 240, ask_volume: 150, total_volume: 390, delta: -90, delta_pct: -23.0, is_buy_imbalance: false, is_sell_imbalance: false },
     ],
-    provenance: {
-      quality: DataQuality.LEVEL_A_EXCHANGE_VERIFIED,
-      side_method: "EXCHANGE_FLAG",
-      source_id: "NSE_TBT",
-      confidence: 1.0,
-      is_estimated: false,
-    },
+    provenance: { quality: DataQuality.LEVEL_A_EXCHANGE_VERIFIED, side_method: "EXCHANGE_FLAG", source_id: "NSE_TBT", confidence: 1.0, is_estimated: false },
+  },
+  {
+    instrument_id: "INS_NSE_RELIANCE",
+    timestamp_utc: Date.now() - 900000,
+    timeframe: "5m",
+    open: 2504.5,
+    high: 2508.0,
+    low: 2504.0,
+    close: 2507.5,
+    volume: 2310,
+    delta: 580,
+    poc_price: 2506.0,
+    value_area_high: 2507.5,
+    value_area_low: 2505.0,
+    clusters: [
+      { price: 2508.0, bid_volume: 50, ask_volume: 220, total_volume: 270, delta: 170, delta_pct: 62.9, is_buy_imbalance: true, is_sell_imbalance: false },
+      { price: 2507.0, bid_volume: 110, ask_volume: 450, total_volume: 560, delta: 340, delta_pct: 60.7, is_buy_imbalance: true, is_sell_imbalance: false },
+      { price: 2506.0, bid_volume: 380, ask_volume: 520, total_volume: 900, delta: 140, delta_pct: 15.5, is_buy_imbalance: false, is_sell_imbalance: false },
+      { price: 2505.0, bid_volume: 290, ask_volume: 210, total_volume: 500, delta: -80, delta_pct: -16.0, is_buy_imbalance: false, is_sell_imbalance: false },
+      { price: 2504.0, bid_volume: 60, ask_volume: 20, total_volume: 80, delta: -40, delta_pct: -50.0, is_buy_imbalance: false, is_sell_imbalance: false },
+    ],
+    provenance: { quality: DataQuality.LEVEL_A_EXCHANGE_VERIFIED, side_method: "EXCHANGE_FLAG", source_id: "NSE_TBT", confidence: 1.0, is_estimated: false },
+  },
+  {
+    instrument_id: "INS_NSE_RELIANCE",
+    timestamp_utc: Date.now() - 600000,
+    timeframe: "5m",
+    open: 2507.5,
+    high: 2509.0,
+    low: 2503.5,
+    close: 2504.0,
+    volume: 2750,
+    delta: -430,
+    poc_price: 2506.0,
+    value_area_high: 2507.0,
+    value_area_low: 2504.5,
+    clusters: [
+      { price: 2509.0, bid_volume: 90, ask_volume: 30, total_volume: 120, delta: -60, delta_pct: -50.0, is_buy_imbalance: false, is_sell_imbalance: false },
+      { price: 2508.0, bid_volume: 340, ask_volume: 90, total_volume: 430, delta: -250, delta_pct: -58.1, is_buy_imbalance: false, is_sell_imbalance: true },
+      { price: 2507.0, bid_volume: 480, ask_volume: 150, total_volume: 630, delta: -330, delta_pct: -52.3, is_buy_imbalance: false, is_sell_imbalance: true },
+      { price: 2506.0, bid_volume: 420, ask_volume: 410, total_volume: 830, delta: -10, delta_pct: -1.2, is_buy_imbalance: false, is_sell_imbalance: false },
+      { price: 2505.0, bid_volume: 380, ask_volume: 240, total_volume: 620, delta: -140, delta_pct: -22.5, is_buy_imbalance: false, is_sell_imbalance: false },
+      { price: 2504.0, bid_volume: 90, ask_volume: 30, total_volume: 120, delta: -60, delta_pct: -50.0, is_buy_imbalance: false, is_sell_imbalance: false },
+    ],
+    provenance: { quality: DataQuality.LEVEL_A_EXCHANGE_VERIFIED, side_method: "EXCHANGE_FLAG", source_id: "NSE_TBT", confidence: 1.0, is_estimated: false },
+  },
+  {
+    instrument_id: "INS_NSE_RELIANCE",
+    timestamp_utc: Date.now() - 300000,
+    timeframe: "5m",
+    open: 2504.0,
+    high: 2506.5,
+    low: 2502.0,
+    close: 2505.5,
+    volume: 1980,
+    delta: 190,
+    poc_price: 2505.0,
+    value_area_high: 2506.0,
+    value_area_low: 2503.5,
+    clusters: [
+      { price: 2506.5, bid_volume: 40, ask_volume: 160, total_volume: 200, delta: 120, delta_pct: 60.0, is_buy_imbalance: true, is_sell_imbalance: false },
+      { price: 2505.0, bid_volume: 310, ask_volume: 450, total_volume: 760, delta: 140, delta_pct: 18.4, is_buy_imbalance: false, is_sell_imbalance: false },
+      { price: 2504.0, bid_volume: 290, ask_volume: 260, total_volume: 550, delta: -30, delta_pct: -5.4, is_buy_imbalance: false, is_sell_imbalance: false },
+      { price: 2503.0, bid_volume: 240, ask_volume: 180, total_volume: 420, delta: -60, delta_pct: -14.2, is_buy_imbalance: false, is_sell_imbalance: false },
+      { price: 2502.0, bid_volume: 40, ask_volume: 10, total_volume: 50, delta: -30, delta_pct: -60.0, is_buy_imbalance: false, is_sell_imbalance: false },
+    ],
+    provenance: { quality: DataQuality.LEVEL_A_EXCHANGE_VERIFIED, side_method: "EXCHANGE_FLAG", source_id: "NSE_TBT", confidence: 1.0, is_estimated: false },
   },
 ];
 
@@ -152,6 +200,8 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
     "explorer" | "orderflow" | "studio" | "backtest" | "paper"
   >("orderflow");
+
+  const [footprintViewMode, setFootprintViewMode] = useState<"canvas" | "table">("canvas");
 
   const [selectedInst, setSelectedInst] = useState<InstrumentMaster>(
     DEFAULT_INSTRUMENTS[0]
@@ -332,11 +382,49 @@ export const App: React.FC = () => {
         {/* Tab 02: Order Flow Lab */}
         {activeTab === "orderflow" && (
           <div className="flex flex-col gap-6">
-            <FootprintChart
-              bars={SAMPLE_FOOTPRINT_BARS}
-              symbol={selectedInst.symbol}
-              timeframe="5m"
-            />
+            {/* View Mode Toggle */}
+            <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-lg p-2.5">
+              <span className="text-xs font-semibold text-slate-300">
+                Footprint Rendering Engine:
+              </span>
+              <div className="flex rounded-md border border-slate-700 overflow-hidden text-xs font-mono">
+                <button
+                  onClick={() => setFootprintViewMode("canvas")}
+                  className={`px-3 py-1 font-bold transition-all ${
+                    footprintViewMode === "canvas"
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                      : "bg-slate-950 text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  ⚡ Canvas (60 FPS Pan & Zoom)
+                </button>
+                <button
+                  onClick={() => setFootprintViewMode("table")}
+                  className={`px-3 py-1 font-bold transition-all ${
+                    footprintViewMode === "table"
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                      : "bg-slate-950 text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Cluster Table Ladder
+                </button>
+              </div>
+            </div>
+
+            {footprintViewMode === "canvas" ? (
+              <CanvasFootprintChart
+                bars={SAMPLE_FOOTPRINT_BARS}
+                symbol={selectedInst.symbol}
+                timeframe="5m"
+              />
+            ) : (
+              <FootprintChart
+                bars={SAMPLE_FOOTPRINT_BARS}
+                symbol={selectedInst.symbol}
+                timeframe="5m"
+              />
+            )}
+
             <VolumeProfileView profile={SAMPLE_PROFILE} />
           </div>
         )}
