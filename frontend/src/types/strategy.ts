@@ -148,15 +148,15 @@ export interface BacktestMetrics {
 }
 
 export interface ClosedTrade {
-  instrument_id: string;
+  instrument_id?: string;
   symbol: string;
   side: "LONG" | "SHORT";
-  quantity: number;
+  quantity?: number;
   entry_price: number;
   exit_price: number;
-  entry_time_utc: number;
-  exit_time_utc: number;
-  gross_pnl: number;
+  entry_time_utc?: number;
+  exit_time_utc?: number;
+  gross_pnl?: number;
   net_pnl: number;
   total_fees: number;
   exit_reason: string;
