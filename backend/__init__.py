@@ -1,0 +1,1 @@
+"""STRATLAB Backend Application Root."""
