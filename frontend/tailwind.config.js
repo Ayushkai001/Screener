@@ -7,6 +7,21 @@ export default {
   theme: {
     extend: {
       colors: {
+        lime: {
+          primary: '#D4F638',
+          hover: '#C2E225',
+          dim: 'rgba(212, 246, 56, 0.12)',
+          border: 'rgba(212, 246, 56, 0.35)',
+        },
+        dark: {
+          bg: '#08080a',
+          surface: '#0d0d10',
+          card: '#131316',
+          'card-hover': '#18181c',
+          border: '#1f1f24',
+          'border-light': '#2c2c34',
+          muted: '#8e8e96',
+        },
         obsidian: {
           950: '#04070d',
           900: '#070b12',
@@ -47,6 +62,8 @@ export default {
         ]
       },
       boxShadow: {
+        'glow-lime': '0 0 24px -2px rgba(212, 246, 56, 0.45)',
+        'glow-lime-subtle': '0 0 16px -2px rgba(212, 246, 56, 0.20)',
         'glow-indigo': '0 0 20px -3px rgba(99, 102, 241, 0.35)',
         'glow-emerald': '0 0 20px -3px rgba(16, 185, 129, 0.35)',
         'glow-rose': '0 0 20px -3px rgba(244, 63, 94, 0.35)',

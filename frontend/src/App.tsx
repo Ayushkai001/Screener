@@ -475,121 +475,87 @@ export const App: React.FC = () => {
   const dayChangePct = (dayChange / prevClose) * 100;
 
   return (
-    <div className="min-h-screen bg-obsidian-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-600 selection:text-white">
-      {/* Top Institutional Workstation Header */}
-      <header className="border-b border-slate-800/90 bg-obsidian-900/90 backdrop-blur sticky top-0 z-50 px-5 py-2.5 flex items-center justify-between shadow-2xl">
-        {/* Brand & Platform Architecture */}
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center font-black text-white text-sm shadow-glow-indigo">
-            SL
+    <div className="min-h-screen bg-[#08080a] text-[#f4f4f6] flex flex-col font-sans selection:bg-lime-primary selection:text-black">
+      {/* Top Paytech-Inspired Minimal Header */}
+      <header className="border-b border-[#1c1c22] bg-[#0c0c0e]/95 backdrop-blur-md sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between shadow-2xl">
+        {/* Brand & Tagline */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xl font-black tracking-tight text-white">
+              stratlab<span className="text-lime-primary font-black">.</span>
+            </span>
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-lime-dim text-lime-primary border border-lime-border uppercase tracking-wider ml-1">
+              v2.0
+            </span>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-extrabold tracking-tight text-white">
-                STRATLAB
-              </h1>
-              <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
-                PROVENANCE V2
-              </span>
-            </div>
-            <p className="text-[10px] font-mono text-slate-500">
-              One Unified Engine • Multi-Source • Zero Look-ahead
-            </p>
-          </div>
-        </div>
 
-        {/* Global Market Ticker Ribbon */}
-        <div className="hidden lg:flex items-center gap-4 bg-obsidian-950 px-4 py-1.5 rounded-xl border border-slate-800/90 font-mono text-xs">
-          {/* Quick Instrument Switcher */}
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <div className="h-4 w-px bg-[#222228] hidden sm:block" />
+
+          {/* Quick Instrument Switcher Pill */}
+          <div className="flex items-center gap-2 bg-[#141418] border border-[#222228] hover:border-[#33333d] rounded-full px-3.5 py-1.5 transition-all">
+            <span className="w-2 h-2 rounded-full bg-lime-primary shadow-glow-lime animate-pulse" />
             <select
               value={selectedInst.instrument_id}
               onChange={(e) => {
                 const found = DEFAULT_INSTRUMENTS.find((i) => i.instrument_id === e.target.value);
                 if (found) setSelectedInst(found);
               }}
-              className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer"
+              className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer tracking-wide"
             >
               {DEFAULT_INSTRUMENTS.map((inst) => (
-                <option key={inst.instrument_id} value={inst.instrument_id} className="bg-obsidian-900 text-slate-100">
+                <option key={inst.instrument_id} value={inst.instrument_id} className="bg-[#121214] text-white">
                   {inst.symbol} ({inst.exchange} · {inst.asset_class})
                 </option>
               ))}
             </select>
           </div>
+        </div>
 
-          <div className="h-3 w-px bg-slate-800" />
-
+        {/* Global Market Ticker Ribbon */}
+        <div className="hidden lg:flex items-center gap-4 bg-[#141418] px-4 py-1.5 rounded-full border border-[#222228] font-mono text-xs">
           {/* LTP & Price Change */}
           <div className="flex items-center gap-2">
             <span className="text-white font-bold text-sm">₹{ltp.toFixed(2)}</span>
-            <span className={`text-[11px] font-semibold px-1.5 py-0.2 rounded ${dayChange >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-rose-500/15 text-rose-400"}`}>
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${dayChange >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-rose-500/15 text-rose-400"}`}>
               {dayChange >= 0 ? "+" : ""}{dayChange.toFixed(2)} ({dayChangePct >= 0 ? "+" : ""}{dayChangePct.toFixed(2)}%)
             </span>
           </div>
 
-          <div className="h-3 w-px bg-slate-800" />
+          <div className="h-3 w-px bg-[#26262e]" />
 
           {/* Day High / Low */}
-          <div className="text-[11px] text-slate-400 flex items-center gap-2">
-            <span>H: <strong className="text-slate-200">2,511.00</strong></span>
-            <span>L: <strong className="text-slate-200">2,498.00</strong></span>
-          </div>
-
-          <div className="h-3 w-px bg-slate-800" />
-
-          {/* Net Session Delta */}
-          <div className="text-[11px] flex items-center gap-1.5">
-            <span className="text-slate-500">Net Δ:</span>
-            <span className="text-emerald-400 font-bold">+1,520 (72% Agg. Buys)</span>
+          <div className="text-[11px] text-[#8e8e96] flex items-center gap-2">
+            <span>H: <strong className="text-white">2,511.00</strong></span>
+            <span>L: <strong className="text-white">2,498.00</strong></span>
           </div>
         </div>
 
-        {/* Global Controls & Provenance Monitor */}
-        <div className="flex items-center gap-2.5">
-          {/* Live Streaming Feed Simulator Toggle (Commented out for simplified view)
-          <button
-            onClick={toggleSimulation}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-              isSimulating
-                ? "bg-rose-600 hover:bg-rose-500 text-white shadow-glow-rose"
-                : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-glow-emerald"
-            }`}
-          >
-            <span>{isSimulating ? "⏹ Stop Feed" : "▶ Live Stream"}</span>
-          </button>
-          */}
-
+        {/* Right Status Controls */}
+        <div className="flex items-center gap-3">
           {/* WebSocket Ping Badge */}
-          <div className="hidden sm:flex bg-obsidian-950 border border-slate-800 rounded-lg px-2.5 py-1 text-[11px] font-mono items-center gap-2">
+          <div className="hidden sm:flex bg-[#141418] border border-[#222228] rounded-full px-3 py-1.5 text-xs font-mono items-center gap-2">
             <span
               className={`w-2 h-2 rounded-full ${
-                isConnected ? "bg-emerald-400 animate-pulse" : "bg-slate-500"
+                isConnected ? "bg-lime-primary shadow-glow-lime" : "bg-slate-500"
               }`}
             />
             <span className="text-slate-300">
               {isConnected ? `${latencyMs}ms` : "Offline"}
             </span>
-            <span className="text-slate-600">|</span>
-            <span className="text-cyan-400 font-bold">{tickCount} Ticks</span>
           </div>
 
-          {/* Interactive Provenance Badge (Commented out for simplified view)
-          <button
-            onClick={() => setShowProvenanceModal(true)}
-            className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-mono font-semibold text-emerald-300 flex items-center gap-1.5 hover:bg-emerald-500/20 transition-all cursor-pointer shadow-glow-emerald"
-            title="Click to inspect Data Provenance architecture"
-          >
-            <span>✓ Genuine Level A</span>
-          </button>
-          */}
+          {/* Account Pill (Paytech Style) */}
+          <div className="flex items-center gap-2 bg-[#141418] border border-[#222228] rounded-full px-3.5 py-1.5 text-xs font-mono text-white">
+            <span className="text-sm">💼</span>
+            <span className="font-bold text-slate-200">Paper Desk</span>
+            <span className="text-lime-primary font-bold">₹{(paperAccount.equity / 1000).toFixed(1)}k</span>
+          </div>
         </div>
       </header>
 
       {/* Main Tabbed Navigation Strip */}
-      <nav className="border-b border-slate-800/80 bg-obsidian-900/40 px-5 py-2 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-1.5">
+      <nav className="border-b border-[#1c1c22] bg-[#09090c] px-6 py-3 flex items-center justify-between text-xs">
+        <div className="flex items-center gap-2.5">
           {[
             // { id: "explorer", label: "01 · Market Explorer", icon: "🌐" },
             // { id: "orderflow", label: "02 · Order Flow Lab", icon: "📊" },
@@ -600,10 +566,10 @@ export const App: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`px-3.5 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
+              className={`px-5 py-2 rounded-full font-bold transition-all flex items-center gap-2 text-xs tracking-wide cursor-pointer ${
                 activeTab === tab.id
-                  ? "bg-indigo-600 text-white font-bold shadow-glow-indigo"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+                  ? "bg-lime-primary text-black shadow-glow-lime-subtle font-extrabold"
+                  : "text-[#8e8e96] hover:text-white bg-[#131316] border border-[#202026] hover:border-[#32323c]"
               }`}
             >
               <span>{tab.icon}</span>
@@ -613,23 +579,15 @@ export const App: React.FC = () => {
         </div>
 
         {/* Real-time World Clocks */}
-        <div className="hidden md:flex items-center gap-3 font-mono text-[11px] text-slate-400">
-          <div className="flex items-center gap-1">
+        <div className="hidden md:flex items-center gap-3 font-mono text-xs text-[#8e8e96]">
+          <div className="flex items-center gap-1.5 bg-[#131316] border border-[#202026] rounded-full px-3 py-1">
             <span className="text-slate-500">IST:</span>
-            <span className="text-slate-200 font-semibold">
+            <span className="text-slate-200 font-bold">
               {currentTime.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata" })}
             </span>
           </div>
-          <span className="text-slate-700">|</span>
-          <div className="flex items-center gap-1">
-            <span className="text-slate-500">UTC:</span>
-            <span className="text-slate-300">
-              {currentTime.toLocaleTimeString("en-GB", { timeZone: "UTC" })}
-            </span>
-          </div>
-          <span className="text-slate-700">|</span>
-          <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold text-[10px]">
-            SESSION ACTIVE
+          <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold text-[10px] tracking-wider uppercase">
+            Market Live
           </span>
         </div>
       </nav>

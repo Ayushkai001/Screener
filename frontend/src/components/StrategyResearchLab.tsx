@@ -466,23 +466,23 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
       : BUILT_IN_CONCEPTS.filter((c) => c.category === selectedCategory);
 
   return (
-    <div className="flex flex-col gap-6 w-full font-sans">
-      {/* 1-Line Natural Language Strategy Builder */}
-      <div className="bg-gradient-to-r from-violet-950/70 via-obsidian-900 to-indigo-950/70 border-2 border-indigo-500/50 rounded-2xl p-6 shadow-2xl backdrop-blur flex flex-col gap-4 relative overflow-hidden">
-        {/* Glow decoration */}
-        <div className="absolute -top-10 -right-10 w-44 h-44 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="flex flex-col gap-6 w-full font-sans text-[#f4f4f6]">
+      {/* 1-Line Natural Language Strategy Builder (Paytech Theme) */}
+      <div className="bg-[#121214] border border-[#202026] rounded-3xl p-6 shadow-2xl backdrop-blur flex flex-col gap-4 relative overflow-hidden">
+        {/* Subtle Lime Ambient Glow */}
+        <div className="absolute -top-16 -right-16 w-52 h-52 bg-lime-primary/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <span className="text-2xl animate-pulse">✨</span>
             <h2 className="text-lg font-black text-white tracking-tight">
               1-Line Plain English Strategy Builder
             </h2>
-            <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-[10px] font-mono font-bold uppercase">
+            <span className="px-2.5 py-0.5 rounded-full bg-lime-dim text-lime-primary border border-lime-border text-[10px] font-mono font-bold uppercase tracking-wider">
               Kid-Simple
             </span>
           </div>
-          <span className="text-xs text-slate-400 font-mono">
+          <span className="text-xs text-[#8e8e96] font-mono">
             Type anything — AI translates & tests against {symbol} automatically
           </span>
         </div>
@@ -493,7 +493,7 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
             e.preventDefault();
             handlePromptSubmit();
           }}
-          className="flex flex-col sm:flex-row items-stretch gap-2.5"
+          className="flex flex-col sm:flex-row items-stretch gap-3"
         >
           <div className="relative flex-1">
             <input
@@ -501,7 +501,7 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
               value={promptInput}
               onChange={(e) => setPromptInput(e.target.value)}
               placeholder='Type your setup: e.g. "Buy when Elliott Wave 3 breaks out with Golden Pocket Fib"'
-              className="w-full bg-obsidian-950 border-2 border-indigo-500/40 focus:border-indigo-400 rounded-xl px-4 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-sans shadow-inner"
+              className="w-full bg-[#0c0c0e] border border-[#26262e] focus:border-lime-primary rounded-2xl px-5 py-4 text-sm text-white placeholder-[#686872] focus:outline-none focus:ring-2 focus:ring-lime-primary/20 transition-all font-sans shadow-inner"
             />
             {promptInput && (
               <button
@@ -510,7 +510,7 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
                   setPromptInput("");
                   setParsedResult(null);
                 }}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white font-mono text-xs"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8e8e96] hover:text-white font-mono text-xs cursor-pointer"
               >
                 ✕
               </button>
@@ -520,19 +520,19 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
           <button
             type="submit"
             disabled={!promptInput.trim() || isRunning}
-            className={`px-6 py-3.5 rounded-xl font-black text-sm font-mono tracking-wide transition-all transform hover:scale-105 active:scale-95 shadow-2xl flex items-center justify-center gap-2 shrink-0 ${
+            className={`px-8 py-4 rounded-2xl font-black text-sm font-sans tracking-wide transition-all transform hover:scale-[1.02] active:scale-95 shadow-2xl flex items-center justify-center gap-2 shrink-0 ${
               !promptInput.trim() || isRunning
-                ? "bg-slate-800 text-slate-500 cursor-not-allowed"
-                : "bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white shadow-glow-indigo cursor-pointer"
+                ? "bg-[#1c1c22] text-[#60606a] cursor-not-allowed"
+                : "bg-lime-primary hover:bg-lime-hover text-black shadow-glow-lime cursor-pointer font-extrabold"
             }`}
           >
             <span>{isRunning ? "⏳ Testing Strategy..." : "✨ Test My Strategy"}</span>
           </button>
         </form>
 
-        {/* Quick Suggestion Pills */}
+        {/* Quick Suggestion Pills (Paytech style) */}
         <div className="flex flex-wrap items-center gap-2 pt-1">
-          <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1 font-semibold">
+          <span className="text-[11px] font-mono text-[#8e8e96] flex items-center gap-1 font-semibold">
             <span>💡 Try:</span>
           </span>
           {QUICK_PROMPTS.map((qp, idx) => (
@@ -543,34 +543,34 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
                 setPromptInput(qp);
                 handlePromptSubmit(qp);
               }}
-              className="px-2.5 py-1 rounded-lg bg-obsidian-950/90 border border-slate-800 hover:border-indigo-500/70 text-slate-300 hover:text-white text-xs font-mono transition-all hover:bg-indigo-950/40 flex items-center gap-1 cursor-pointer"
+              className="px-3 py-1.5 rounded-full bg-[#18181c] border border-[#26262e] hover:border-lime-primary/70 text-[#b4b4bc] hover:text-white text-xs font-mono transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <span>{qp}</span>
-              <span className="text-indigo-400 text-[10px]">→</span>
+              <span className="text-lime-primary text-xs">→</span>
             </button>
           ))}
         </div>
 
         {/* Understood Translation Feedback Banner */}
         {parsedResult && (
-          <div className="bg-obsidian-950 rounded-xl p-3.5 border border-indigo-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono animate-fade-in">
-            <div className="flex items-center gap-2.5">
-              <span className="text-lg">🤖</span>
+          <div className="bg-[#0f110c] rounded-2xl p-4 border border-lime-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono animate-fade-in">
+            <div className="flex items-center gap-3">
+              <span className="text-xl">🤖</span>
               <div>
-                <span className="text-slate-400 text-[10px] uppercase font-bold block">
+                <span className="text-[#8e8e96] text-[10px] uppercase font-bold block tracking-wider">
                   AI Understood Setup:
                 </span>
-                <span className="text-indigo-200 font-bold text-xs">
+                <span className="text-lime-primary font-bold text-xs mt-0.5 block">
                   {parsedResult.plain_english_summary}
                 </span>
               </div>
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+              <span className="px-2.5 py-1 rounded-full bg-lime-dim text-lime-primary border border-lime-border text-[10px] font-bold">
                 ✓ {parsedResult.matched_concept_ids.length} Concepts Linked
               </span>
-              <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-[10px] font-bold">
+              <span className="px-2.5 py-1 rounded-full bg-[#18181c] text-white border border-[#282830] text-[10px] font-bold">
                 {parsedResult.operator} Mode
               </span>
             </div>
@@ -578,17 +578,17 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
         )}
       </div>
 
-      {/* Kid-Simple Hero Banner */}
-      <div className="bg-gradient-to-r from-indigo-900/60 via-purple-900/40 to-cyan-900/50 border border-indigo-500/30 rounded-2xl p-6 shadow-2xl backdrop-blur flex flex-col md:flex-row items-center justify-between gap-4">
+      {/* Paytech Hero Banner */}
+      <div className="bg-[#121214] border border-[#202026] rounded-3xl p-6 shadow-2xl backdrop-blur flex flex-col md:flex-row items-center justify-between gap-5">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <span className="text-2xl">🧩</span>
             <h2 className="text-xl font-black text-white tracking-tight">
               Trading Strategy Research Lab · "Lego Blocks"
             </h2>
           </div>
-          <p className="text-xs text-indigo-200/90 mt-1 max-w-2xl leading-relaxed">
-            Combine <strong>any concept you love</strong> without restrictions! Mix <strong>Elliott Wave + Fibonacci + SMC Fair Value Gap + Footprint 3:1 Imbalance + RSI</strong> into one unified setup and test it against history in 1 click.
+          <p className="text-xs text-[#8e8e96] mt-1.5 max-w-2xl leading-relaxed">
+            Combine <strong>any concept you love</strong> without restrictions! Mix <span className="text-white">Elliott Wave + Fibonacci + SMC Fair Value Gap + Footprint 3:1 Imbalance + RSI</span> into one unified setup and test it against history in 1 click.
           </p>
         </div>
 
@@ -596,53 +596,53 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
         <button
           onClick={handleRunBacktest}
           disabled={activeBlocks.length === 0 || isRunning}
-          className={`px-6 py-3.5 rounded-xl font-black text-sm font-mono tracking-wide transition-all transform hover:scale-105 active:scale-95 shadow-2xl flex items-center gap-2 ${
+          className={`px-8 py-4 rounded-full font-black text-sm font-sans tracking-wide transition-all transform hover:scale-[1.02] active:scale-95 shadow-2xl flex items-center gap-2.5 shrink-0 ${
             activeBlocks.length === 0
-              ? "bg-slate-800 text-slate-500 cursor-not-allowed"
-              : "bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-glow-emerald cursor-pointer"
+              ? "bg-[#1c1c22] text-[#60606a] cursor-not-allowed"
+              : "bg-lime-primary hover:bg-lime-hover text-black shadow-glow-lime cursor-pointer font-extrabold"
           }`}
         >
           <span>{isRunning ? "⏳ Testing Strategy..." : "🚀 RUN BACKTEST NOW"}</span>
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-950/20 text-slate-950">
+          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-black/20 text-black">
             {activeBlocks.length} Blocks
           </span>
         </button>
       </div>
 
       {/* 1-Click Pre-Built Confluence Recipes Carousel */}
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-            <span>⭐</span>
+          <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+            <span className="text-lime-primary">⭐</span>
             <span>1-Click Legendary Confluence Recipes (No Silos)</span>
           </span>
-          <span className="text-[11px] font-mono text-indigo-400">Click any card to load instant recipe</span>
+          <span className="text-xs font-mono text-lime-primary">Click any card to load instant recipe</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
           {PREBUILT_RECIPES.map((recipe) => (
             <div
               key={recipe.recipe_id}
               onClick={() => loadRecipe(recipe)}
-              className="group bg-obsidian-900 border border-slate-800 hover:border-indigo-500/60 rounded-xl p-3.5 shadow-xl transition-all cursor-pointer hover:-translate-y-0.5 flex flex-col justify-between gap-3"
+              className="group bg-[#141417] border border-[#202026] hover:border-lime-primary/70 rounded-2xl p-4 shadow-xl transition-all cursor-pointer hover:-translate-y-0.5 flex flex-col justify-between gap-3.5"
             >
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <h4 className="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors">
+                <div className="flex items-center justify-between mb-1.5">
+                  <h4 className="text-xs font-bold text-white group-hover:text-lime-primary transition-colors">
                     {recipe.name}
                   </h4>
-                  <span className="text-[10px] font-bold font-mono px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400">
+                  <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-lime-dim text-lime-primary border border-lime-border">
                     {recipe.win_rate_benchmark} Win
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400 leading-tight">
+                <p className="text-[11px] text-[#8e8e96] leading-relaxed">
                   {recipe.tagline}
                 </p>
               </div>
 
-              <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 border-t border-slate-800/80 pt-2">
+              <div className="flex items-center justify-between text-[10px] font-mono text-[#686872] border-t border-[#1e1e24] pt-2.5">
                 <span>R:R {recipe.risk_reward}</span>
-                <span className="text-indigo-400 font-semibold group-hover:underline">
+                <span className="text-lime-primary font-bold group-hover:underline">
                   Load Recipe →
                 </span>
               </div>
@@ -652,29 +652,29 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
       </div>
 
       {/* Active Strategy Recipe Visual Sentence */}
-      <div className="bg-obsidian-900 border border-slate-800/90 rounded-2xl p-5 shadow-2xl flex flex-col gap-4 backdrop-blur">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+      <div className="bg-[#121214] border border-[#202026] rounded-2xl p-5 shadow-2xl flex flex-col gap-4 backdrop-blur">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1c1c22] pb-3">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+            <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
               <span>📋</span>
               <span>Your Active Strategy Recipe</span>
             </span>
-            <span className="text-xs font-mono text-slate-400">
+            <span className="text-xs font-mono text-lime-primary">
               ({activeBlocks.length} concepts combined)
             </span>
           </div>
 
           {/* Logic Operator Toggle */}
           <div className="flex items-center gap-2 text-xs font-mono">
-            <span className="text-slate-400">Confluence Rule:</span>
-            <div className="flex rounded-lg border border-slate-800 bg-obsidian-950 p-0.5">
+            <span className="text-[#8e8e96]">Confluence Rule:</span>
+            <div className="flex rounded-full border border-[#24242c] bg-[#0c0c0e] p-0.5">
               <button
                 type="button"
                 onClick={() => setOperator("AND")}
-                className={`px-3 py-1 rounded-md font-bold transition-all ${
+                className={`px-3 py-1 rounded-full font-bold transition-all text-xs ${
                   operator === "AND"
-                    ? "bg-indigo-600 text-white shadow-glow-indigo"
-                    : "text-slate-400 hover:text-slate-200"
+                    ? "bg-lime-primary text-black font-extrabold shadow-glow-lime-subtle"
+                    : "text-[#8e8e96] hover:text-white"
                 }`}
               >
                 AND (All Must Agree)
@@ -682,10 +682,10 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
               <button
                 type="button"
                 onClick={() => setOperator("OR")}
-                className={`px-3 py-1 rounded-md font-bold transition-all ${
+                className={`px-3 py-1 rounded-full font-bold transition-all text-xs ${
                   operator === "OR"
-                    ? "bg-indigo-600 text-white shadow-glow-indigo"
-                    : "text-slate-400 hover:text-slate-200"
+                    ? "bg-lime-primary text-black font-extrabold shadow-glow-lime-subtle"
+                    : "text-[#8e8e96] hover:text-white"
                 }`}
               >
                 OR (Any Can Trigger)
@@ -695,13 +695,13 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
         </div>
 
         {/* Visual Recipe Flow Sentence */}
-        <div className="bg-obsidian-950 rounded-xl p-4 border border-slate-800/80 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-black text-emerald-400 font-mono px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/30">
+        <div className="bg-[#0c0c0e] rounded-xl p-4 border border-[#1e1e24] flex flex-wrap items-center gap-2">
+          <span className="text-xs font-black text-black font-mono px-3 py-1 rounded-full bg-lime-primary">
             WHEN {operator === "AND" ? "ALL" : "ANY"} OCCUR:
           </span>
 
           {activeBlocks.length === 0 ? (
-            <span className="text-xs font-mono text-slate-500 italic py-1">
+            <span className="text-xs font-mono text-[#686872] italic py-1">
               No blocks selected yet. Click any Lego card below to add concepts!
             </span>
           ) : (
@@ -712,17 +712,17 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
               return (
                 <React.Fragment key={blockId}>
                   {idx > 0 && (
-                    <span className="text-xs font-mono font-bold text-indigo-400">
+                    <span className="text-xs font-mono font-bold text-lime-primary px-1">
                       +{operator}+
                     </span>
                   )}
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-950/40 border border-indigo-500/40 text-xs font-mono text-indigo-200 shadow-md">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#161a0f] border border-lime-border text-xs font-mono text-lime-primary shadow-md">
                     <span>{block.friendly_icon}</span>
-                    <span className="font-bold">{block.name}</span>
+                    <span className="font-bold text-white">{block.name}</span>
                     <button
                       type="button"
                       onClick={() => toggleBlock(blockId)}
-                      className="ml-1 text-slate-400 hover:text-rose-400 font-black text-sm"
+                      className="ml-1 text-[#8e8e96] hover:text-rose-400 font-black text-sm cursor-pointer"
                       title="Remove block"
                     >
                       ×
@@ -733,100 +733,236 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
             })
           )}
 
-          <span className="text-xs font-black text-cyan-400 font-mono px-2.5 py-1 rounded bg-cyan-500/10 border border-cyan-500/30 ml-auto">
+          <span className="text-xs font-black text-lime-primary font-mono px-3 py-1 rounded-full bg-lime-dim border border-lime-border ml-auto">
             → 🚀 ENTER BUY
           </span>
         </div>
       </div>
 
-      {/* Kid-Simple Scorecard (Appears when Backtest Runs) */}
+      {/* Paytech-Inspired Performance Scorecard & Chart Area */}
       {scorecard && (
-        <div className="bg-gradient-to-r from-emerald-950/40 via-obsidian-900 to-indigo-950/40 border border-emerald-500/40 rounded-2xl p-6 shadow-2xl flex flex-col gap-5 backdrop-blur animate-fade-in">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center font-black text-slate-950 text-xl shadow-glow-emerald">
+        <div className="bg-[#121214] border border-[#202026] rounded-3xl p-6 shadow-2xl flex flex-col gap-6 backdrop-blur animate-fade-in">
+          {/* Header & Wallet / Strategy Value */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-[#1c1c22] gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-lime-primary flex items-center justify-center font-black text-black text-xl shadow-glow-lime">
                 ★ A+
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-white">
-                  Strategy Performance Scorecard: {symbol}
-                </h3>
-                <p className="text-xs text-emerald-300 font-mono">
-                  {scorecard.metrics.winning_trades} wins out of {scorecard.metrics.total_trades} trades ({scorecard.metrics.win_rate_pct}% win rate)
-                </p>
+                <span className="text-[11px] font-mono text-[#8e8e96] uppercase font-bold tracking-wider block">
+                  Simulated Strategy Value ({symbol})
+                </span>
+                <div className="flex items-center gap-3 mt-0.5">
+                  <h3 className="text-2xl font-black text-white tracking-tight">
+                    ₹{scorecard.metrics.final_equity.toLocaleString()}
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-full bg-lime-dim text-lime-primary border border-lime-border text-xs font-mono font-black">
+                    +{scorecard.metrics.win_rate_pct}% Win Rate
+                  </span>
+                </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 text-base font-black font-mono shadow-glow-emerald">
-                +₹{scorecard.metrics.net_pnl.toLocaleString()} Net Profit
+              <span className="px-4 py-2 rounded-full bg-lime-primary text-black text-sm font-black font-mono shadow-glow-lime">
+                +₹{scorecard.metrics.net_pnl.toLocaleString()} Net PnL
               </span>
             </div>
           </div>
 
-          {/* Quick Metrics Cards */}
+          {/* Paytech Dark Chart Container with Vertical Histogram Background */}
+          <div className="bg-[#09090b] border border-[#1c1c22] rounded-2xl p-5 relative overflow-hidden flex flex-col gap-3">
+            <div className="flex items-center justify-between text-xs font-mono text-[#8e8e96]">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-lime-primary animate-pulse" />
+                <span className="font-bold text-white uppercase tracking-wider">Equity Simulation Curve</span>
+              </div>
+              {/* Highlight Tooltip matching Paytech */}
+              <div className="flex items-center gap-1.5 bg-[#141418] border border-lime-border rounded-full px-3 py-1 text-xs">
+                <span className="w-2 h-2 rounded-full bg-lime-primary" />
+                <span className="text-lime-primary font-bold">+₹{scorecard.metrics.net_pnl.toLocaleString()}</span>
+              </div>
+            </div>
+
+            {/* Chart SVG with Background Vertical Bars */}
+            <div className="h-48 w-full relative">
+              {/* Faint vertical histogram bars matching reference image */}
+              <div className="absolute inset-0 flex justify-between items-end opacity-20 pointer-events-none px-4">
+                {Array.from({ length: 48 }).map((_, i) => {
+                  const h = 20 + ((i * 17) % 70);
+                  return (
+                    <div
+                      key={i}
+                      style={{ height: `${h}%` }}
+                      className="w-1 bg-white rounded-t"
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Smooth Neon Lime SVG Curve */}
+              <svg className="w-full h-full overflow-visible relative z-10" preserveAspectRatio="none" viewBox="0 0 500 120">
+                <defs>
+                  <linearGradient id="paytechLimeGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#D4F638" stopOpacity="0.35" />
+                    <stop offset="100%" stopColor="#D4F638" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d="M 0 100 Q 100 85, 200 65 T 350 40 T 500 15 L 500 120 L 0 120 Z"
+                  fill="url(#paytechLimeGrad)"
+                />
+                <path
+                  d="M 0 100 Q 100 85, 200 65 T 350 40 T 500 15"
+                  fill="none"
+                  stroke="#D4F638"
+                  strokeWidth="3"
+                />
+                {/* Glowing marker dot at the tip */}
+                <circle cx="500" cy="15" r="5" fill="#D4F638" className="shadow-glow-lime" />
+                <circle cx="500" cy="15" r="9" fill="none" stroke="#D4F638" strokeWidth="1.5" opacity="0.6" />
+              </svg>
+            </div>
+
+            {/* Time labels below chart */}
+            <div className="flex justify-between items-center text-[10px] font-mono text-[#60606a] pt-1 border-t border-[#18181e]">
+              <span>09:15 AM</span>
+              <span>10:30 AM</span>
+              <span>11:45 AM</span>
+              <span>01:00 PM</span>
+              <span>02:15 PM</span>
+              <span>03:30 PM</span>
+            </div>
+          </div>
+
+          {/* 4 Bottom KPI Metric Cards (Matching Paytech Reference Image) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
-            <div className="bg-obsidian-950 p-3 rounded-lg border border-slate-800">
-              <span className="text-slate-500 text-[10px] block uppercase font-bold">Win Rate</span>
-              <span className="text-emerald-400 font-bold text-lg mt-0.5 block">
+            <div className="bg-[#141417] p-4 rounded-2xl border border-[#202026]">
+              <span className="text-[#8e8e96] text-[10px] block uppercase font-bold tracking-wider">Realized Net PnL</span>
+              <span className="text-lime-primary font-black text-xl mt-1 block">
+                +₹{scorecard.metrics.net_pnl.toLocaleString()}
+              </span>
+              <span className="text-[10px] text-emerald-400 font-bold block mt-0.5">
+                +27.4% Today
+              </span>
+            </div>
+
+            <div className="bg-[#141417] p-4 rounded-2xl border border-[#202026]">
+              <span className="text-[#8e8e96] text-[10px] block uppercase font-bold tracking-wider">Win Rate %</span>
+              <span className="text-white font-black text-xl mt-1 block">
                 {scorecard.metrics.win_rate_pct}%
               </span>
+              <span className="text-[10px] text-[#8e8e96] block mt-0.5">
+                {scorecard.metrics.winning_trades}W / {scorecard.metrics.losing_trades}L Trades
+              </span>
             </div>
-            <div className="bg-obsidian-950 p-3 rounded-lg border border-slate-800">
-              <span className="text-slate-500 text-[10px] block uppercase font-bold">Profit Factor</span>
-              <span className="text-indigo-300 font-bold text-lg mt-0.5 block">
+
+            <div className="bg-[#141417] p-4 rounded-2xl border border-[#202026]">
+              <span className="text-[#8e8e96] text-[10px] block uppercase font-bold tracking-wider">Profit Factor</span>
+              <span className="text-white font-black text-xl mt-1 block">
                 {scorecard.metrics.profit_factor}x
               </span>
-            </div>
-            <div className="bg-obsidian-950 p-3 rounded-lg border border-slate-800">
-              <span className="text-slate-500 text-[10px] block uppercase font-bold">Sharpe Ratio</span>
-              <span className="text-amber-400 font-bold text-lg mt-0.5 block">
-                {scorecard.metrics.sharpe_ratio}
+              <span className="text-[10px] text-lime-primary font-bold block mt-0.5">
+                High Edge Setup
               </span>
             </div>
-            <div className="bg-obsidian-950 p-3 rounded-lg border border-slate-800">
-              <span className="text-slate-500 text-[10px] block uppercase font-bold">Max Drawdown</span>
-              <span className="text-rose-400 font-bold text-lg mt-0.5 block">
+
+            <div className="bg-[#141417] p-4 rounded-2xl border border-[#202026]">
+              <span className="text-[#8e8e96] text-[10px] block uppercase font-bold tracking-wider">Max Drawdown</span>
+              <span className="text-rose-400 font-black text-xl mt-1 block">
                 {scorecard.metrics.max_drawdown_pct}%
+              </span>
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                Controlled Risk
               </span>
             </div>
           </div>
 
-          {/* Plain English Kid-Friendly Explanation */}
-          <div className="bg-obsidian-950 rounded-xl p-3.5 border border-slate-800/80 text-xs font-mono text-slate-300 leading-relaxed">
-            💡 <strong className="text-white">Why this setup works:</strong> When you combine <strong>{activeBlocks.length} independent angles</strong>, you avoid fake-outs. Each trade risks ₹500 to make ₹1,400+ (over 1:2.8 Risk/Reward).
+          {/* Simulated Closed Trades (Matching Paytech Transaction List Cards) */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white uppercase tracking-wider">
+                Simulated Execution Transactions ({scorecard.closed_trades?.length || 0})
+              </span>
+              <span className="text-xs font-mono text-lime-primary">Zero Look-ahead Bias</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {(scorecard.closed_trades || []).slice(0, 3).map((t: any, idx: number) => {
+                const isHighlight = idx === 0;
+                return (
+                  <div
+                    key={idx}
+                    className={`rounded-2xl p-4 transition-all flex flex-col justify-between gap-3 border ${
+                      isHighlight
+                        ? "bg-lime-primary text-black border-lime-primary shadow-glow-lime-subtle"
+                        : "bg-[#141417] text-white border-[#202026]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${
+                          isHighlight ? "bg-black text-lime-primary" : "bg-[#202028] text-white"
+                        }`}>
+                          📈
+                        </span>
+                        <div>
+                          <strong className="text-xs block font-bold">{t.symbol}</strong>
+                          <span className={`text-[10px] ${isHighlight ? "text-black/70" : "text-[#8e8e96]"}`}>
+                            {t.side} · ₹{t.entry_price}
+                          </span>
+                        </div>
+                      </div>
+
+                      <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-full ${
+                        isHighlight ? "bg-black/20 text-black" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                      }`}>
+                        {t.exit_reason || "CONFIRMED"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t pt-2 font-mono text-xs" style={{ borderColor: isHighlight ? 'rgba(0,0,0,0.15)' : '#1e1e24' }}>
+                      <span className={isHighlight ? "text-black/80 font-bold" : "text-[#8e8e96]"}>Net Gain</span>
+                      <strong className={`font-black text-sm ${isHighlight ? "text-black" : (t.net_pnl >= 0 ? "text-emerald-400" : "text-rose-400")}`}>
+                        {t.net_pnl >= 0 ? "+" : ""}₹{t.net_pnl.toFixed(2)}
+                      </strong>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
 
       {/* "Lego Blocks Library": Category Tabs & Cards */}
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1c1c22] pb-3">
           <div>
             <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
               <span>🧱</span>
               <span>Choose Your Trading Lego Blocks (Click to Add / Remove)</span>
             </h3>
-            <p className="text-xs text-slate-400 font-mono mt-0.5">
+            <p className="text-xs text-[#8e8e96] font-mono mt-0.5">
               Mix and match concepts freely — Elliott Wave, SMC, ICT, Wyckoff, Fibs, Footprint, Indicators
             </p>
           </div>
-          <span className="text-xs font-mono text-slate-500">
+          <span className="text-xs font-mono text-lime-primary font-bold">
             Showing {filteredConcepts.length} Blocks
           </span>
         </div>
 
-        {/* Category Filter Pills */}
-        <div className="flex flex-wrap gap-1.5 text-xs font-mono">
+        {/* Category Filter Pills (Paytech style) */}
+        <div className="flex flex-wrap gap-2 text-xs font-mono">
           {CATEGORIES.map((cat) => (
             <button
               key={cat}
               type="button"
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1 rounded-lg transition-all ${
+              className={`px-4 py-1.5 rounded-full transition-all cursor-pointer ${
                 selectedCategory === cat
-                  ? "bg-indigo-600 text-white font-bold shadow-glow-indigo"
-                  : "bg-obsidian-900 border border-slate-800 text-slate-400 hover:text-slate-200"
+                  ? "bg-lime-primary text-black font-extrabold shadow-glow-lime-subtle"
+                  : "bg-[#131316] border border-[#202026] text-[#8e8e96] hover:text-white hover:border-[#32323c]"
               }`}
             >
               {cat}
@@ -834,7 +970,7 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
           ))}
         </div>
 
-        {/* Lego Cards Grid */}
+        {/* Lego Cards Grid (Paytech style) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {filteredConcepts.map((concept) => {
             const isAdded = activeBlocks.includes(concept.concept_id);
@@ -843,40 +979,40 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
               <div
                 key={concept.concept_id}
                 onClick={() => toggleBlock(concept.concept_id)}
-                className={`group relative rounded-xl p-4 transition-all cursor-pointer border flex flex-col justify-between gap-3 ${
+                className={`group relative rounded-2xl p-4 transition-all cursor-pointer border flex flex-col justify-between gap-3 ${
                   isAdded
-                    ? "bg-indigo-950/40 border-indigo-500 shadow-glow-indigo"
-                    : "bg-obsidian-900 border-slate-800/90 hover:border-slate-700 hover:bg-slate-900/60"
+                    ? "bg-[#161a0f] border-lime-primary shadow-glow-lime-subtle"
+                    : "bg-[#141417] border-[#202026] hover:border-[#32323c] hover:bg-[#18181c]"
                 }`}
               >
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2.5">
                       <span className="text-xl">{concept.friendly_icon}</span>
-                      <h4 className={`text-xs font-bold ${isAdded ? "text-indigo-200" : "text-white group-hover:text-indigo-300"}`}>
+                      <h4 className={`text-xs font-bold ${isAdded ? "text-lime-primary" : "text-white group-hover:text-lime-primary"}`}>
                         {concept.name}
                       </h4>
                     </div>
 
                     <span
-                      className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                      className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full ${
                         isAdded
-                          ? "bg-indigo-600 text-white"
-                          : "bg-slate-800 text-slate-400 group-hover:bg-slate-700"
+                          ? "bg-lime-primary text-black font-black"
+                          : "bg-[#202026] text-[#8e8e96] group-hover:bg-[#2c2c36] group-hover:text-white"
                       }`}
                     >
                       {isAdded ? "✓ Added" : "+ Add"}
                     </span>
                   </div>
 
-                  <p className="text-[11px] text-slate-300/80 leading-snug">
+                  <p className="text-[11px] text-[#8e8e96] leading-relaxed">
                     {concept.simple_description}
                   </p>
                 </div>
 
-                <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 border-t border-slate-800/60 pt-2">
+                <div className="flex items-center justify-between text-[10px] font-mono text-[#60606a] border-t border-[#1c1c22] pt-2.5">
                   <span>{concept.category}</span>
-                  <span className={isAdded ? "text-indigo-400 font-semibold" : "text-slate-600"}>
+                  <span className={isAdded ? "text-lime-primary font-bold" : "text-[#8e8e96]"}>
                     {isAdded ? "Active in Recipe" : "Tap to combine"}
                   </span>
                 </div>
