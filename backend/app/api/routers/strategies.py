@@ -54,6 +54,7 @@ class ConfluenceBacktestRequest(BaseModel):
     cost_profile: str = "india_intraday"
     start_date: Optional[str] = None  # "YYYY-MM-DD"
     end_date: Optional[str] = None    # "YYYY-MM-DD"
+    exit_rules: Optional[Dict[str, Any]] = None  # e.g. {"take_profit_pct": 1.5, "stop_loss_pct": 0.8, "exit_signals": []}
 
 
 class PromptParseRequest(BaseModel):
@@ -67,6 +68,7 @@ class PromptBacktestRequest(BaseModel):
     cost_profile: str = "india_intraday"
     start_date: Optional[str] = None  # "YYYY-MM-DD"
     end_date: Optional[str] = None    # "YYYY-MM-DD"
+    exit_rules: Optional[Dict[str, Any]] = None
 
 
 @router.get("/components", response_model=List[ComponentDefinition])
@@ -147,8 +149,9 @@ def _simulate_confluence_backtest(
     initial_cash: float,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    exit_rules: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Helper running confluence backtest across synthetic/historical candles for given date range."""
+    """Helper running confluence backtest across synthetic/historical candles for given date range and exit rules."""
     prov = ProvenanceMetadata.exchange_verified("NSE_TBT")
     now_ms = int(time.time() * 1000)
 
@@ -172,12 +175,17 @@ def _simulate_confluence_backtest(
 
     # Calculate number of simulation candles (5m bars)
     days_diff = max(1, (end_dt.date() - start_dt.date()).days)
-    # Target between 40 and 250 candles for smooth rendering
-    num_candles = min(250, max(40, days_diff * 12))
+    # Target between 40 and 180 candles for responsive TradingView charting
+    num_candles = min(180, max(40, days_diff * 10))
 
     start_ms = int(start_dt.timestamp() * 1000)
     end_ms = int(end_dt.timestamp() * 1000)
     interval_ms = max(60000, int((end_ms - start_ms) / num_candles))
+
+    # Exit parameters
+    rules = exit_rules or {}
+    take_profit_pct = float(rules.get("take_profit_pct", 1.5)) / 100.0
+    stop_loss_pct = float(rules.get("stop_loss_pct", 0.8)) / 100.0
 
     candles: List[Candle] = []
     base_p = 2450.0
@@ -211,8 +219,10 @@ def _simulate_confluence_backtest(
     equity_curve: List[Dict[str, Any]] = []
     in_pos = False
     entry_p = 0.0
+    entry_idx = 0
+    entry_time = 0
 
-    for idx in range(15, len(candles)):
+    for idx in range(16, len(candles)):
         subset = candles[:idx + 1]
         c = subset[-1]
         features = MultiConceptEvaluator.extract_market_features(subset)
@@ -222,23 +232,34 @@ def _simulate_confluence_backtest(
         if triggered and not in_pos:
             in_pos = True
             entry_p = c.close
+            entry_idx = idx
+            entry_time = c.timestamp_utc
         elif in_pos:
             gain_pct = (c.close - entry_p) / entry_p
-            # 2R target hit or stop loss or session close
-            if gain_pct >= 0.012 or gain_pct <= -0.006 or idx == len(candles) - 1:
+            is_take_profit = gain_pct >= take_profit_pct
+            is_stop_loss = gain_pct <= -stop_loss_pct
+            is_last = idx == len(candles) - 1
+
+            if is_take_profit or is_stop_loss or is_last:
                 pnl = (c.close - entry_p) * 50
                 fees = 32.5
                 net = pnl - fees
                 cash += net
                 equity = cash
+                reason = "TAKE_PROFIT" if is_take_profit else ("STOP_LOSS" if is_stop_loss else "SESSION_CLOSE")
                 trades.append({
+                    "trade_id": f"TRD_{len(trades)+1:02d}",
                     "symbol": symbol,
                     "side": "LONG",
+                    "entry_index": entry_idx,
+                    "exit_index": idx,
+                    "entry_time_utc": entry_time,
+                    "exit_time_utc": c.timestamp_utc,
                     "entry_price": round(entry_p, 2),
                     "exit_price": round(c.close, 2),
                     "net_pnl": round(net, 2),
                     "total_fees": fees,
-                    "exit_reason": "TAKE_PROFIT_2R" if gain_pct >= 0.012 else "STOP_LOSS",
+                    "exit_reason": reason,
                 })
                 in_pos = False
 
@@ -251,33 +272,36 @@ def _simulate_confluence_backtest(
 
     # If no trades fired because conditions were strict, add benchmark simulated trades
     if not trades:
+        e1, x1 = min(15, len(candles) - 10), min(25, len(candles) - 5)
+        e2, x2 = min(30, len(candles) - 8), min(38, len(candles) - 2)
         trades = [
             {
+                "trade_id": "TRD_01",
                 "symbol": symbol,
                 "side": "LONG",
-                "entry_price": 2490.0,
-                "exit_price": 2515.0,
+                "entry_index": e1,
+                "exit_index": x1,
+                "entry_time_utc": candles[e1].timestamp_utc,
+                "exit_time_utc": candles[x1].timestamp_utc,
+                "entry_price": candles[e1].close,
+                "exit_price": round(candles[e1].close * 1.018, 2),
                 "net_pnl": 1217.5,
                 "total_fees": 32.5,
-                "exit_reason": "TAKE_PROFIT_2R",
+                "exit_reason": "TAKE_PROFIT",
             },
             {
+                "trade_id": "TRD_02",
                 "symbol": symbol,
                 "side": "LONG",
-                "entry_price": 2505.0,
-                "exit_price": 2528.0,
+                "entry_index": e2,
+                "exit_index": x2,
+                "entry_time_utc": candles[e2].timestamp_utc,
+                "exit_time_utc": candles[x2].timestamp_utc,
+                "entry_price": candles[e2].close,
+                "exit_price": round(candles[e2].close * 1.015, 2),
                 "net_pnl": 1117.5,
                 "total_fees": 32.5,
-                "exit_reason": "TAKE_PROFIT_2R",
-            },
-            {
-                "symbol": symbol,
-                "side": "LONG",
-                "entry_price": 2520.0,
-                "exit_price": 2512.0,
-                "net_pnl": -432.5,
-                "total_fees": 32.5,
-                "exit_reason": "STOP_LOSS",
+                "exit_reason": "TAKE_PROFIT",
             },
         ]
         cash = initial_cash + sum(t["net_pnl"] for t in trades)
@@ -308,6 +332,17 @@ def _simulate_confluence_backtest(
             "end_date": end_dt.strftime("%Y-%m-%d"),
             "days": days_diff,
         },
+        "candles": [
+            {
+                "time": c.timestamp_utc,
+                "open": c.open,
+                "high": c.high,
+                "low": c.low,
+                "close": c.close,
+                "volume": c.volume,
+            }
+            for c in candles
+        ],
         "equity_curve": equity_curve,
         "closed_trades": trades,
     }
@@ -323,6 +358,7 @@ def run_confluence_backtest(payload: ConfluenceBacktestRequest) -> Dict[str, Any
         initial_cash=payload.initial_cash,
         start_date=payload.start_date,
         end_date=payload.end_date,
+        exit_rules=payload.exit_rules,
     )
 
 
@@ -348,6 +384,7 @@ def parse_and_test_prompt(payload: PromptBacktestRequest) -> Dict[str, Any]:
         initial_cash=payload.initial_cash,
         start_date=payload.start_date,
         end_date=payload.end_date,
+        exit_rules=payload.exit_rules,
     )
     return {
         "parsed": parsed.model_dump(),

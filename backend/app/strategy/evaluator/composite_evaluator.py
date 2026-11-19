@@ -92,8 +92,8 @@ class MultiConceptEvaluator:
         if len(closes) >= 14:
             rsi = IndicatorEngine.rsi(closes, period=14)
             features["rsi"] = rsi[-1]
-            features["rsi_oversold"] = rsi[-1] < 35.0
-            features["rsi_overbought"] = rsi[-1] > 65.0
+            features["rsi_oversold"] = rsi[-1] < 35.0 if rsi[-1] is not None else False
+            features["rsi_overbought"] = rsi[-1] > 65.0 if rsi[-1] is not None else False
         else:
             features["rsi_oversold"] = False
             features["rsi_overbought"] = False
