@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { ConceptBlock, ConfluenceRecipe, ParsedPromptResult } from "../types/concepts";
 
 export const BUILT_IN_CONCEPTS: ConceptBlock[] = [
@@ -243,10 +243,17 @@ const CATEGORIES = [
   "Indicators",
 ];
 
-const generateFallbackScorecard = (blocks: string[], sym: string) => {
+const formatIsoDate = (d: Date) => d.toISOString().split("T")[0];
+
+const generateFallbackScorecard = (blocks: string[], sym: string, startDate?: string, endDate?: string) => {
   const count = Math.max(1, blocks.length);
+  const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 86400000);
+  const end = endDate ? new Date(endDate) : new Date();
+  const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 3600 * 24)));
+
   const winRate = Math.min(88, Math.max(58, 62 + count * 3.5));
-  const totalTrades = 12 + count * 2;
+  const tradesMultiplier = Math.max(1, Math.round(diffDays / 7));
+  const totalTrades = Math.min(65, (12 + count * 2) * (diffDays <= 7 ? 1 : 2));
   const winningTrades = Math.round((totalTrades * winRate) / 100);
   const losingTrades = totalTrades - winningTrades;
   const netPnl = Math.round(winningTrades * 1450 - losingTrades * 420);
@@ -267,8 +274,13 @@ const generateFallbackScorecard = (blocks: string[], sym: string) => {
       sharpe_ratio: Math.round((1.6 + count * 0.22) * 100) / 100,
       final_equity: finalEquity,
     },
+    date_range: {
+      start_date: startDate || formatIsoDate(start),
+      end_date: endDate || formatIsoDate(end),
+      days: diffDays,
+    },
     equity_curve: Array.from({ length: 24 }, (_, i) => ({
-      timestamp_utc: Date.now() - (24 - i) * 3600000,
+      timestamp_utc: start.getTime() + Math.round((i / 23) * (end.getTime() - start.getTime())),
       equity: 100000 + Math.round((i / 23) * netPnl + (Math.sin(i) * 300)),
       cash: 100000 + Math.round((i / 23) * (netPnl * 0.8)),
       drawdown_pct: i === 6 ? maxDrawdown : 0.0,
@@ -300,6 +312,13 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
   const [operator, setOperator] = useState<"AND" | "OR">("AND");
   const [isRunning, setIsRunning] = useState(false);
   const [scorecard, setScorecard] = useState<any | null>(null);
+
+  // Date Range Selection State
+  const defaultEnd = formatIsoDate(new Date());
+  const defaultStart = formatIsoDate(new Date(Date.now() - 30 * 86400000));
+  const [startDate, setStartDate] = useState<string>(defaultStart);
+  const [endDate, setEndDate] = useState<string>(defaultEnd);
+  const [datePreset, setDatePreset] = useState<"1D" | "7D" | "1M" | "3M" | "1Y" | "CUSTOM">("1M");
 
   const scorecardRef = useRef<HTMLDivElement>(null);
 
@@ -372,11 +391,46 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
     };
   };
 
-  const handleConfluenceBacktest = async (blocksToRun?: string[], opToUse?: "AND" | "OR") => {
+  const isRunningRef = useRef(false);
+
+  const applyDatePreset = (preset: "1D" | "7D" | "1M" | "3M" | "1Y") => {
+    setDatePreset(preset);
+    const end = new Date();
+    const start = new Date();
+    if (preset === "1D") {
+      // 1 day (today)
+    } else if (preset === "7D") {
+      start.setDate(end.getDate() - 7);
+    } else if (preset === "1M") {
+      start.setDate(end.getDate() - 30);
+    } else if (preset === "3M") {
+      start.setDate(end.getDate() - 90);
+    } else if (preset === "1Y") {
+      start.setDate(end.getDate() - 365);
+    }
+    const sStr = formatIsoDate(start);
+    const eStr = formatIsoDate(end);
+    setStartDate(sStr);
+    setEndDate(eStr);
+    handleConfluenceBacktest(activeBlocks, operator, sStr, eStr);
+  };
+
+  const handleConfluenceBacktest = async (
+    blocksToRun?: string[],
+    opToUse?: "AND" | "OR",
+    startToUse?: string,
+    endToUse?: string
+  ) => {
+    // Prevent concurrent calls (StrictMode double-mount, rapid clicks)
+    if (isRunningRef.current) return;
+    isRunningRef.current = true;
+
     const blocks = (blocksToRun ?? activeBlocks).length > 0 
       ? (blocksToRun ?? activeBlocks) 
       : ["elliott_wave_3_breakout", "fib_golden_pocket", "smc_fair_value_gap"];
     const op = opToUse ?? operator;
+    const sDate = startToUse ?? startDate;
+    const eDate = endToUse ?? endDate;
 
     setIsRunning(true);
     try {
@@ -388,6 +442,8 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
           operator: op,
           symbol,
           initial_cash: 100000.0,
+          start_date: sDate,
+          end_date: eDate,
         }),
       });
       if (response.ok) {
@@ -398,11 +454,12 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
         throw new Error("Backend response error");
       }
     } catch {
-      const fallback = generateFallbackScorecard(blocks, symbol);
+      const fallback = generateFallbackScorecard(blocks, symbol, sDate, eDate);
       setScorecard(fallback);
       onRunBacktestResult(fallback);
     } finally {
       setIsRunning(false);
+      isRunningRef.current = false;
     }
   };
 
@@ -419,6 +476,8 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
           prompt: text,
           symbol,
           initial_cash: 100000.0,
+          start_date: startDate,
+          end_date: endDate,
         }),
       });
       if (response.ok) {
@@ -441,7 +500,7 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
       setActiveBlocks(localParsed.matched_concept_ids);
       setOperator(localParsed.operator as "AND" | "OR");
 
-      const fallback = generateFallbackScorecard(localParsed.matched_concept_ids, symbol);
+      const fallback = generateFallbackScorecard(localParsed.matched_concept_ids, symbol, startDate, endDate);
       setScorecard(fallback);
       onRunBacktestResult(fallback);
     } finally {
@@ -473,8 +532,13 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
   };
 
   // Run initial backtest on load so the dashboard is immediately populated
+  // Guard against React StrictMode double-mount race condition
+  const hasInitialized = useRef(false);
   useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
     handleConfluenceBacktest(activeBlocks, operator);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Smooth scroll to scorecard when it updates
@@ -669,6 +733,67 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
           </div>
         </div>
 
+        {/* Backtest Date Range Selector Toolbar (Kid-Simple) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0d0d10] p-3 rounded-xl border border-[#1e1e24] font-mono text-xs">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="text-[#a0a0ab] font-bold flex items-center gap-1.5 text-xs">
+              <span>📅</span>
+              <span>Test Period:</span>
+            </span>
+
+            {/* Quick 1-Click Presets */}
+            <div className="flex items-center gap-1 bg-[#141418] p-1 rounded-lg border border-[#22222a]">
+              {(["1D", "7D", "1M", "3M", "1Y"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => applyDatePreset(p)}
+                  className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                    datePreset === p
+                      ? "bg-[#D4F638] text-black shadow-[0_0_10px_rgba(212,246,56,0.25)] font-black"
+                      : "text-[#a0a0ab] hover:text-white hover:bg-[#1f1f26]"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Custom Date Pickers (From / To) */}
+          <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-1.5 bg-[#141418] px-3 py-1.5 rounded-lg border border-[#22222a] focus-within:border-[#D4F638]">
+              <span className="text-[#a0a0ab] text-[10px] font-bold uppercase">From</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setDatePreset("CUSTOM");
+                  handleConfluenceBacktest(activeBlocks, operator, e.target.value, endDate);
+                }}
+                className="bg-transparent text-white font-mono text-xs focus:outline-none cursor-pointer [color-scheme:dark]"
+              />
+            </div>
+
+            <span className="text-[#a0a0ab] font-bold">→</span>
+
+            <div className="flex items-center gap-1.5 bg-[#141418] px-3 py-1.5 rounded-lg border border-[#22222a] focus-within:border-[#D4F638]">
+              <span className="text-[#a0a0ab] text-[10px] font-bold uppercase">To</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setDatePreset("CUSTOM");
+                  handleConfluenceBacktest(activeBlocks, operator, startDate, e.target.value);
+                }}
+                className="bg-transparent text-white font-mono text-xs focus:outline-none cursor-pointer [color-scheme:dark]"
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Visual Recipe Flow Sentence */}
         <div className="bg-[#09090b] rounded-xl p-4 border border-[#1e1e24] flex flex-wrap items-center gap-2">
           <span className="text-xs font-black text-black font-mono px-3 py-1 rounded-full bg-[#D4F638]">
@@ -725,9 +850,16 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
                   ★ A+
                 </div>
                 <div>
-                  <span className="text-[11px] font-mono text-[#a0a0ab] uppercase font-bold tracking-wider block">
-                    Simulated Strategy Value ({symbol})
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] font-mono text-[#a0a0ab] uppercase font-bold tracking-wider block">
+                      Simulated Strategy Value ({symbol})
+                    </span>
+                    {scorecard.date_range && (
+                      <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-[#18181f] text-[#D4F638] border border-[#2c2c36] font-bold">
+                        📅 {scorecard.date_range.start_date} → {scorecard.date_range.end_date} ({scorecard.date_range.days}d)
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-3 mt-0.5">
                     <h3 className="text-3xl font-black text-white tracking-tight">
                       ₹{scorecard.metrics.final_equity.toLocaleString()}
@@ -800,14 +932,26 @@ export const StrategyResearchLab: React.FC<StrategyResearchLabProps> = ({
                 </svg>
               </div>
 
-              {/* Time labels below chart */}
+              {/* Time / Date labels below chart */}
               <div className="flex justify-between items-center text-[10px] font-mono text-[#8a8a94] pt-1 border-t border-[#18181e]">
-                <span>09:15 AM</span>
-                <span>10:30 AM</span>
-                <span>11:45 AM</span>
-                <span>01:00 PM</span>
-                <span>02:15 PM</span>
-                <span>03:30 PM</span>
+                {scorecard.date_range && scorecard.date_range.days > 2 ? (
+                  <>
+                    <span>{scorecard.date_range.start_date}</span>
+                    <span>1/4</span>
+                    <span>Mid ({scorecard.date_range.days / 2}d)</span>
+                    <span>3/4</span>
+                    <span>{scorecard.date_range.end_date}</span>
+                  </>
+                ) : (
+                  <>
+                    <span>09:15 AM</span>
+                    <span>10:30 AM</span>
+                    <span>11:45 AM</span>
+                    <span>01:00 PM</span>
+                    <span>02:15 PM</span>
+                    <span>03:30 PM</span>
+                  </>
+                )}
               </div>
             </div>
 

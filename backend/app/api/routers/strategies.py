@@ -1,6 +1,7 @@
 """STRATLAB Strategy Studio and Backtest REST Endpoints."""
 
 import time
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -51,6 +52,8 @@ class ConfluenceBacktestRequest(BaseModel):
     symbol: str = "RELIANCE"
     initial_cash: float = 100_000.0
     cost_profile: str = "india_intraday"
+    start_date: Optional[str] = None  # "YYYY-MM-DD"
+    end_date: Optional[str] = None    # "YYYY-MM-DD"
 
 
 class PromptParseRequest(BaseModel):
@@ -62,6 +65,8 @@ class PromptBacktestRequest(BaseModel):
     symbol: str = "RELIANCE"
     initial_cash: float = 100_000.0
     cost_profile: str = "india_intraday"
+    start_date: Optional[str] = None  # "YYYY-MM-DD"
+    end_date: Optional[str] = None    # "YYYY-MM-DD"
 
 
 @router.get("/components", response_model=List[ComponentDefinition])
@@ -140,14 +145,44 @@ def _simulate_confluence_backtest(
     operator: str,
     symbol: str,
     initial_cash: float,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Helper running confluence backtest across synthetic/historical candles."""
+    """Helper running confluence backtest across synthetic/historical candles for given date range."""
     prov = ProvenanceMetadata.exchange_verified("NSE_TBT")
     now_ms = int(time.time() * 1000)
+
+    # Determine date bounds
+    today_dt = datetime.now(timezone.utc)
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc, hour=15, minute=30)
+        except Exception:
+            end_dt = today_dt
+    else:
+        end_dt = today_dt
+
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc, hour=9, minute=15)
+        except Exception:
+            start_dt = end_dt - timedelta(days=30)
+    else:
+        start_dt = end_dt - timedelta(days=30)
+
+    # Calculate number of simulation candles (5m bars)
+    days_diff = max(1, (end_dt.date() - start_dt.date()).days)
+    # Target between 40 and 250 candles for smooth rendering
+    num_candles = min(250, max(40, days_diff * 12))
+
+    start_ms = int(start_dt.timestamp() * 1000)
+    end_ms = int(end_dt.timestamp() * 1000)
+    interval_ms = max(60000, int((end_ms - start_ms) / num_candles))
+
     candles: List[Candle] = []
     base_p = 2450.0
 
-    for i in range(120):
+    for i in range(num_candles):
         # Create wave oscillations with pullbacks and impulse
         phase = i % 30
         if phase < 10:
@@ -157,14 +192,15 @@ def _simulate_confluence_backtest(
         else:
             p = base_p + 8.0 + (phase - 18) * 4.0   # Wave 3 impulse up
 
+        candle_time = start_ms + i * interval_ms
         candles.append(Candle(
             instrument_id=f"INS_NSE_{symbol}",
-            timestamp_utc=now_ms - (120 - i) * 300000,
+            timestamp_utc=candle_time,
             timeframe="5m",
-            open=p,
-            high=p + 3.0,
-            low=p - 1.5,
-            close=p + 2.0,
+            open=round(p, 2),
+            high=round(p + 3.0, 2),
+            low=round(p - 1.5, 2),
+            close=round(p + 2.0, 2),
             volume=15000 + (i * 120),
             provenance=prov,
         ))
@@ -267,6 +303,11 @@ def _simulate_confluence_backtest(
             "sharpe_ratio": 2.15,
             "final_equity": round(cash, 2),
         },
+        "date_range": {
+            "start_date": start_dt.strftime("%Y-%m-%d"),
+            "end_date": end_dt.strftime("%Y-%m-%d"),
+            "days": days_diff,
+        },
         "equity_curve": equity_curve,
         "closed_trades": trades,
     }
@@ -280,6 +321,8 @@ def run_confluence_backtest(payload: ConfluenceBacktestRequest) -> Dict[str, Any
         operator=payload.operator,
         symbol=payload.symbol,
         initial_cash=payload.initial_cash,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
     )
 
 
@@ -303,6 +346,8 @@ def parse_and_test_prompt(payload: PromptBacktestRequest) -> Dict[str, Any]:
         operator=parsed.operator,
         symbol=payload.symbol,
         initial_cash=payload.initial_cash,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
     )
     return {
         "parsed": parsed.model_dump(),
