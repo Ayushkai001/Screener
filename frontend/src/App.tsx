@@ -3,6 +3,7 @@ import { CanvasFootprintChart } from "./components/CanvasFootprintChart";
 import { FootprintChart } from "./components/FootprintChart";
 import { MarketExplorer } from "./components/MarketExplorer";
 import { PaperTradingDashboard } from "./components/PaperTradingDashboard";
+import { StrategyGraphStudio } from "./components/StrategyGraphStudio";
 import { VisualStrategyBuilder } from "./components/VisualStrategyBuilder";
 import { VolumeProfileView } from "./components/VolumeProfileView";
 import {
@@ -202,6 +203,7 @@ export const App: React.FC = () => {
   >("orderflow");
 
   const [footprintViewMode, setFootprintViewMode] = useState<"canvas" | "table">("canvas");
+  const [studioViewMode, setStudioViewMode] = useState<"graph" | "blocks">("graph");
 
   const [selectedInst, setSelectedInst] = useState<InstrumentMaster>(
     DEFAULT_INSTRUMENTS[0]
@@ -431,10 +433,48 @@ export const App: React.FC = () => {
 
         {/* Tab 03: Strategy Studio */}
         {activeTab === "studio" && (
-          <VisualStrategyBuilder
-            onCompileStrategy={handleCompileStrategy}
-            onRunBacktest={handleRunBacktest}
-          />
+          <div className="flex flex-col gap-6">
+            {/* Studio Mode Toggle */}
+            <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-lg p-2.5">
+              <span className="text-xs font-semibold text-slate-300">
+                Strategy Builder Interface:
+              </span>
+              <div className="flex rounded-md border border-slate-700 overflow-hidden text-xs font-mono">
+                <button
+                  onClick={() => setStudioViewMode("graph")}
+                  className={`px-3 py-1 font-bold transition-all ${
+                    studioViewMode === "graph"
+                      ? "bg-violet-600 text-white shadow-md shadow-violet-600/30"
+                      : "bg-slate-950 text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  ⚡ React Flow Node Graph
+                </button>
+                <button
+                  onClick={() => setStudioViewMode("blocks")}
+                  className={`px-3 py-1 font-bold transition-all ${
+                    studioViewMode === "blocks"
+                      ? "bg-violet-600 text-white shadow-md shadow-violet-600/30"
+                      : "bg-slate-950 text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Visual Condition Blocks
+                </button>
+              </div>
+            </div>
+
+            {studioViewMode === "graph" ? (
+              <StrategyGraphStudio
+                onCompileStrategy={handleCompileStrategy}
+                onRunBacktest={handleRunBacktest}
+              />
+            ) : (
+              <VisualStrategyBuilder
+                onCompileStrategy={handleCompileStrategy}
+                onRunBacktest={handleRunBacktest}
+              />
+            )}
+          </div>
         )}
 
         {/* Tab 04: Backtest Lab */}
