@@ -4,6 +4,7 @@ import { FootprintChart } from "./components/FootprintChart";
 import { MarketExplorer } from "./components/MarketExplorer";
 import { PaperTradingDashboard } from "./components/PaperTradingDashboard";
 import { StrategyGraphStudio } from "./components/StrategyGraphStudio";
+import { StrategyResearchLab } from "./components/StrategyResearchLab";
 import { VisualStrategyBuilder } from "./components/VisualStrategyBuilder";
 import { VolumeProfileView } from "./components/VolumeProfileView";
 import { useMarketStream } from "./hooks/useMarketStream";
@@ -252,7 +253,7 @@ export const App: React.FC = () => {
   >("orderflow");
 
   const [footprintViewMode, setFootprintViewMode] = useState<"canvas" | "table">("canvas");
-  const [studioViewMode, setStudioViewMode] = useState<"graph" | "blocks">("graph");
+  const [studioViewMode, setStudioViewMode] = useState<"lego" | "graph" | "blocks">("lego");
 
   const [selectedInst, setSelectedInst] = useState<InstrumentMaster>(
     DEFAULT_INSTRUMENTS[0]
@@ -717,12 +718,22 @@ export const App: React.FC = () => {
         {activeTab === "studio" && (
           <div className="flex flex-col gap-6">
             {/* Studio Mode Toggle */}
-            <div className="flex items-center justify-between bg-obsidian-900 border border-slate-800/90 rounded-xl p-3 shadow-xl backdrop-blur">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-obsidian-900 border border-slate-800/90 rounded-xl p-3 shadow-xl backdrop-blur">
               <span className="text-xs font-bold text-white flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-violet-500 shadow-glow-indigo" />
-                Strategy Authoring Paradigm:
+                Strategy Research Interface:
               </span>
               <div className="flex rounded-lg border border-slate-800 bg-obsidian-950 p-0.5 text-xs font-mono">
+                <button
+                  onClick={() => setStudioViewMode("lego")}
+                  className={`px-3 py-1 rounded-md font-bold transition-all ${
+                    studioViewMode === "lego"
+                      ? "bg-violet-600 text-white shadow-glow-indigo"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  🧩 Lego Blocks (Multi-Concept)
+                </button>
                 <button
                   onClick={() => setStudioViewMode("graph")}
                   className={`px-3 py-1 rounded-md font-bold transition-all ${
@@ -731,7 +742,7 @@ export const App: React.FC = () => {
                       : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
-                  ⚡ React Flow Visual DAG
+                  ⚡ React Flow Node DAG
                 </button>
                 <button
                   onClick={() => setStudioViewMode("blocks")}
@@ -741,12 +752,19 @@ export const App: React.FC = () => {
                       : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
-                  Visual Condition Blocks
+                  Condition Blocks
                 </button>
               </div>
             </div>
 
-            {studioViewMode === "graph" ? (
+            {studioViewMode === "lego" ? (
+              <StrategyResearchLab
+                symbol={selectedInst.symbol}
+                onRunBacktestResult={(result) => {
+                  setBacktestResult(result);
+                }}
+              />
+            ) : studioViewMode === "graph" ? (
               <StrategyGraphStudio
                 onCompileStrategy={handleCompileStrategy}
                 onRunBacktest={handleRunBacktest}
