@@ -43,6 +43,17 @@ export const useMarketStream = ({
   const socketRef = useRef<WebSocket | null>(null);
   const pingTimestampRef = useRef<number>(0);
 
+  // Keep latest callbacks in refs to avoid reconnecting on every render
+  const onTickRef = useRef(onTick);
+  const onFootprintUpdateRef = useRef(onFootprintUpdate);
+  const onExecutionFillRef = useRef(onExecutionFill);
+
+  useEffect(() => {
+    onTickRef.current = onTick;
+    onFootprintUpdateRef.current = onFootprintUpdate;
+    onExecutionFillRef.current = onExecutionFill;
+  });
+
   // Connect to WebSocket
   useEffect(() => {
     let ws: WebSocket;
@@ -68,11 +79,11 @@ export const useMarketStream = ({
             setLatencyMs(rtt);
           } else if (data.type === "MARKET_TICK") {
             setTickCount((prev) => prev + 1);
-            if (onTick) onTick(data);
+            if (onTickRef.current) onTickRef.current(data);
           } else if (data.type === "FOOTPRINT_UPDATE") {
-            if (onFootprintUpdate) onFootprintUpdate(data.bar);
+            if (onFootprintUpdateRef.current) onFootprintUpdateRef.current(data.bar);
           } else if (data.type === "EXECUTION_FILL") {
-            if (onExecutionFill) onExecutionFill(data);
+            if (onExecutionFillRef.current) onExecutionFillRef.current(data);
           }
         } catch {
           // Ignore non-json frames
@@ -104,7 +115,7 @@ export const useMarketStream = ({
         socketRef.current.close();
       }
     };
-  }, [url, instrumentId, accountId, onTick, onFootprintUpdate, onExecutionFill]);
+  }, [url, instrumentId, accountId]);
 
   return {
     isConnected,
