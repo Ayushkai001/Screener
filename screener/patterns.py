@@ -170,6 +170,12 @@ _SIMPLE = {
     "volume_shock": lambda f, p: _gt(f.get("rvol_tod"), 3.0),
     "gap_up": lambda f, p: _gt(f.get("gap_pct"), 2.0),
     "gap_down": lambda f, p: f.get("gap_pct") is not None and f.get("gap_pct") < -2.0,
+    "supertrend_buy": lambda f, p: f.get("supertrend_dir") == 1 and f.get("supertrend_dir_prev") == -1,
+    "supertrend_sell": lambda f, p: f.get("supertrend_dir") == -1 and f.get("supertrend_dir_prev") == 1,
+    "stoch_bull_cross": lambda f, p: _le(f.get("stoch_k_prev"), f.get("stoch_d_prev")) and _gt(f.get("stoch_k"), f.get("stoch_d")),
+    "stoch_bear_cross": lambda f, p: _gt(f.get("stoch_k_prev"), f.get("stoch_d_prev")) and _le(f.get("stoch_k"), f.get("stoch_d")),
+    "stoch_oversold": lambda f, p: f.get("stoch_k") is not None and f.get("stoch_k") < 20.0,
+    "stoch_overbought": lambda f, p: _gt(f.get("stoch_k"), 80.0),
 }
 
 

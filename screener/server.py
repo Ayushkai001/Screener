@@ -226,8 +226,12 @@ def _compile(src):
     In SSE live streaming, the client's filter query is re-evaluated against market snapshots
     every second. Re-tokenizing and parsing AST nodes on every tick is wasteful. Caching the
     compiled predicate lambda amortizes compilation overhead to zero after the first tick.
+    Dynamically expands the schema dictionary to admit arbitrary custom-period indicators
+    (e.g. ema17, rsi21, atr10, high_35d) requested on-the-fly.
     """
-    return expr.compile_filter(src, FIELDS)
+    custom = backtest.custom_fields(src)
+    schema = backtest._bt_fields(custom) if custom else FIELDS
+    return expr.compile_filter(src, schema)
 
 
 def _sort_key(field, desc):

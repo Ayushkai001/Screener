@@ -519,14 +519,15 @@ class Engine:
         if official:
             open_, high, low, price, volume = orow[0], orow[1], orow[2], orow[3], orow[4]
 
-        row = {
-            "ysym": s, "sym": info["sym"], "name": q.get("name") or info.get("name", ""),
-            "exchange": info["exchange"], "series": info.get("series", ""),
-            "industry": info.get("industry", ""), "indices": info.get("indices", []),
-            "price": price, "open": open_, "high": high, "low": low,
-            "volume": volume, "time": q["time"], "session": session, "official_eod": official,
-            "hist_ok": ok, "note": note, "hist_days": base.n if base else 0,
-        }
+        row = indicators.LiveRow(
+            base,
+            ysym=s, sym=info["sym"], name=q.get("name") or info.get("name", ""),
+            exchange=info["exchange"], series=info.get("series", ""),
+            industry=info.get("industry", ""), indices=info.get("indices", []),
+            price=price, open=open_, high=high, low=low,
+            volume=volume, time=q["time"], session=session, official_eod=official,
+            hist_ok=ok, note=note, hist_days=base.n if base else 0,
+        )
         frac = self.cal.session_fraction(self.clock()) if session == self.clock().astimezone(IST).date().isoformat() else 1.0
 
         if base is not None and ok:

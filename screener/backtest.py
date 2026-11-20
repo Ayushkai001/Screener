@@ -138,8 +138,8 @@ class SpecError(ValueError):
 
 
 # ---------------------------------------------------------------- custom periods
-# Regex matching custom indicator periods like 'ema13', 'sma50', 'rsi7', or 'ema13_prev'.
-CUSTOM_RE = re.compile(r"\b(ema|sma|rsi)(\d{1,3})(?:_prev)?\b", re.I)
+# Regex matching custom indicator periods like 'ema13', 'sma50', 'rsi7', 'atr10', 'high_35d', or 'ema13_prev'.
+CUSTOM_RE = re.compile(r"\b(ema|sma|rsi|atr|high_|low_)(\d{1,3})(?:d)?(?:_prev)?\b", re.I)
 CUSTOM_MAX = 400
 
 
@@ -157,18 +157,23 @@ def custom_fields(*srcs):
     for src in srcs:
         for m in CUSTOM_RE.finditer(src or ""):
             kind, n = m.group(1).lower(), int(m.group(2))
-            name = "%s%d" % (kind, n)
+            if kind == "high_":
+                name = "high_%dd" % n
+            elif kind == "low_":
+                name = "low_%dd" % n
+            else:
+                name = "%s%d" % (kind, n)
             if name in FIELDS:
                 continue
             if not 2 <= n <= CUSTOM_MAX:
-                raise SpecError("%s period must be 2-%d (got %d)" % (kind.upper(), CUSTOM_MAX, n))
+                raise SpecError("%s period must be 2-%d (got %d)" % (kind.upper().rstrip("_"), CUSTOM_MAX, n))
             out.add(name)
     return sorted(out)
 
 
 def _split_custom(name):
-    """Split indicator identifier like 'ema13' into ('ema', 13)."""
-    m = re.fullmatch(r"(ema|sma|rsi)(\d+)", name)
+    """Split indicator identifier like 'ema13', 'atr10', or 'high_35d' into (kind, period)."""
+    m = re.fullmatch(r"(ema|sma|rsi|atr|high_|low_)(\d+)(?:d)?", name)
     return m.group(1), int(m.group(2))
 
 
@@ -182,8 +187,12 @@ def custom_series(bars, names):
     - SMA: Rolling window sum with periodic re-summing (every 500 bars) via math.fsum
       to completely eliminate IEEE 754 floating-point drift over 10-year timelines.
     - RSI: Wilder's smoothing via indicators.Rma, exactly matching indicators.Base.
+    - ATR: Wilder's smoothing of True Range via indicators.Rma.
+    - High/Low: Historical rolling N-day high/low close channel.
     """
     closes = [b[4] for b in bars]
+    highs = [b[2] for b in bars]
+    lows = [b[3] for b in bars]
     out = {}
     for name in names:
         kind, n = _split_custom(name)
@@ -199,13 +208,36 @@ def custom_series(bars, names):
                     run = math.fsum(closes[max(0, i - n + 1):i + 1])
                 vals.append(run / n if i >= n - 1 else None)
             out[name] = vals
-        else:   # rsi: Wilder's smoothing
+        elif kind == "rsi":
             g, l = indicators.Rma(n), indicators.Rma(n)
             vals = [None]
             for a, b in zip(closes, closes[1:]):
                 ch = b - a
                 vals.append(indicators._rsi(g.step(max(ch, 0.0)), l.step(max(-ch, 0.0))))
             out[name] = vals[:len(closes)]
+        elif kind == "atr":
+            atr = indicators.Rma(n)
+            vals = [None]
+            for i in range(1, len(bars)):
+                tr = indicators.true_range(highs[i], lows[i], closes[i - 1])
+                vals.append(atr.step(tr))
+            out[name] = vals[:len(closes)]
+        elif kind == "high_":
+            vals = []
+            for i in range(len(closes)):
+                if i >= n:
+                    vals.append(max(closes[i - n:i]))
+                else:
+                    vals.append(None)
+            out[name] = vals
+        elif kind == "low_":
+            vals = []
+            for i in range(len(closes)):
+                if i >= n:
+                    vals.append(min(closes[i - n:i]))
+                else:
+                    vals.append(None)
+            out[name] = vals
     return out
 
 
@@ -220,10 +252,11 @@ def _bt_fields(custom=()):
     f = {k: v for k, v in FIELDS.items() if k not in NOT_HISTORICAL}
     for name in custom:
         kind, n = _split_custom(name)
-        fmt = "num" if kind == "rsi" else "price"
-        f[name] = {"label": "%s %d" % (kind.upper(), n), "type": "num", "fmt": fmt, "group": "Custom",
+        fmt = "num" if kind in ("rsi", "atr") else "price"
+        lbl = "%s %d" % (kind.rstrip("_").upper(), n)
+        f[name] = {"label": lbl, "type": "num", "fmt": fmt, "group": "Custom",
                    "prev": name + "_prev"}
-        f[name + "_prev"] = {"label": "%s %d (prev)" % (kind.upper(), n), "type": "num", "fmt": fmt,
+        f[name + "_prev"] = {"label": "%s (prev)" % lbl, "type": "num", "fmt": fmt,
                              "group": "Custom", "prev": None}
     return f
 

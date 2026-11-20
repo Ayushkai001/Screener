@@ -203,6 +203,32 @@ class TestCustomPeriods(unittest.TestCase):
             self.assertLessEqual(e5["ema5"][i - 1], e5["ema13"][i - 1])
             self.assertEqual(idx[t["entry_date"]], i + 1)          # never filled on the signal bar
 
+    def test_ema10_built_in(self):
+        from screener import fields
+        self.assertIn("ema10", fields.FIELDS)
+        self.assertIn("ema10_prev", fields.FIELDS)
+        bars = wave(100)
+        b = indicators.Base(bars)
+        f = indicators.live(b, 100.0)
+        self.assertIsNotNone(f.get("ema10"))
+        self.assertEqual(bt.custom_fields("ema10 > ema20"), [])
+
+    def test_supertrend_and_stoch_backtest(self):
+        bars = wave(300)
+        cp = bt._Compiled(bt.prepare({"entry": "supertrend_dir == 1 and stoch_bull_cross", "stop": "pct:3",
+                                      "target": "pct:6", "min_turnover": 0})[0])
+        trades = bt.simulate(bars, {"sym": "W"}, cp)
+        self.assertIsInstance(trades, list)
+
+    def test_custom_indicators_extended(self):
+        cf = bt.custom_fields("atr10 < 5 and high > high_35d and low < low_15d")
+        self.assertEqual(sorted(cf), ["atr10", "high_35d", "low_15d"])
+        bars = wave(100)
+        cs = bt.custom_series(bars, cf)
+        self.assertEqual(len(cs["atr10"]), len(bars))
+        self.assertEqual(len(cs["high_35d"]), len(bars))
+        self.assertEqual(len(cs["low_15d"]), len(bars))
+
 
 class TestEngineFixes(unittest.TestCase):
     def test_merge_keeps_store_limit(self):

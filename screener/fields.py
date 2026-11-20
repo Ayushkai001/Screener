@@ -5,6 +5,7 @@ One source of truth for the filter parser (names, prev-day variants), the API
 indicators.live() and list it here.
 """
 
+import re
 from .indicators import EMA_N, SMA_N
 
 # Master field schema tuples: (name, label, type, format, group, prev_field)
@@ -28,54 +29,68 @@ _F = [
 
     # ---- Live Price & Session Range ----
     ("price", "Price", "num", "price", "Price", "prev_close"),
-    ("change", "Chg", "num", "price", "Price", None),
-    ("change_pct", "Chg %", "num", "pct", "Price", None),
     ("open", "Open", "num", "price", "Price", None),
     ("high", "High", "num", "price", "Price", None),
     ("low", "Low", "num", "price", "Price", None),
     ("prev_close", "Prev Close", "num", "price", "Price", None),
+    ("change", "Change", "num", "price", "Price", None),
+    ("change_pct", "Change %", "num", "pct", "Price", None),
     ("gap_pct", "Gap %", "num", "pct", "Price", None),
-    ("chg_from_open", "Chg from Open %", "num", "pct", "Price", None),
-    ("range_pct", "Day Range %", "num", "pct", "Price", None),
-    ("close_in_range", "Pos in Range", "num", "ratio", "Price", None),
 
-    # ---- Volume & Liquidity ----
+    # ---- Traded Volume & Liquidity ----
     ("volume", "Volume", "num", "vol", "Volume", "prev_volume"),
     ("prev_volume", "Prev Volume", "num", "vol", "Volume", None),
-    ("turnover", "Turnover", "num", "money", "Volume", None),
+    ("turnover", "Turnover ₹", "num", "money", "Volume", None),
     ("avg_vol10", "Avg Vol 10D", "num", "vol", "Volume", None),
     ("avg_vol20", "Avg Vol 20D", "num", "vol", "Volume", None),
     ("avg_vol50", "Avg Vol 50D", "num", "vol", "Volume", None),
-    ("rvol", "Rel Vol", "num", "ratio", "Volume", None),
-    ("rvol_tod", "Rel Vol (time adj)", "num", "ratio", "Volume", None),
+    ("rvol", "RVOL", "num", "ratio", "Volume", None),
+    ("rvol_tod", "RVOL (time-of-day)", "num", "ratio", "Volume", None),
+    ("vwap", "VWAP", "num", "price", "Volume", None),
+    ("vwap_pct", "% from VWAP", "num", "pct", "Performance", None),
 
     # ---- Oscillators & Momentum ----
     ("rsi14", "RSI 14", "num", "num", "Oscillators", "rsi14_prev"),
     ("rsi14_prev", "RSI 14 (prev)", "num", "num", "Oscillators", None),
-    ("macd", "MACD", "num", "num", "Oscillators", "macd_prev"),
-    ("macd_signal", "MACD Signal", "num", "num", "Oscillators", "macd_signal_prev"),
-    ("macd_hist", "MACD Hist", "num", "num", "Oscillators", None),
-    ("macd_prev", "MACD (prev)", "num", "num", "Oscillators", None),
-    ("macd_signal_prev", "MACD Signal (prev)", "num", "num", "Oscillators", None),
+    ("macd", "MACD", "num", "price", "Oscillators", "macd_prev"),
+    ("macd_prev", "MACD (prev)", "num", "price", "Oscillators", None),
+    ("macd_signal", "MACD Signal", "num", "price", "Oscillators", "macd_signal_prev"),
+    ("macd_signal_prev", "MACD Signal (prev)", "num", "price", "Oscillators", None),
+    ("macd_hist", "MACD Hist", "num", "price", "Oscillators", None),
     ("adx14", "ADX 14", "num", "num", "Oscillators", None),
-    ("plus_di", "+DI", "num", "num", "Oscillators", None),
-    ("minus_di", "-DI", "num", "num", "Oscillators", None),
+    ("plus_di", "+DI 14", "num", "num", "Oscillators", None),
+    ("minus_di", "−DI 14", "num", "num", "Oscillators", None),
+    ("stoch_k", "Stochastic %K (14)", "num", "num", "Oscillators", "stoch_k_prev"),
+    ("stoch_k_prev", "Stochastic %K (prev)", "num", "num", "Oscillators", None),
+    ("stoch_d", "Stochastic %D (3)", "num", "num", "Oscillators", "stoch_d_prev"),
+    ("stoch_d_prev", "Stochastic %D (prev)", "num", "num", "Oscillators", None),
 
-    # ---- Volatility Bands ----
+    # ---- Volatility & Bollinger Bands ----
     ("atr14", "ATR 14", "num", "price", "Volatility", None),
     ("atr_pct", "ATR %", "num", "pct", "Volatility", None),
-    ("bb_upper", "BB Upper", "num", "price", "Volatility", None),
-    ("bb_lower", "BB Lower", "num", "price", "Volatility", None),
-    ("bb_pctb", "BB %B", "num", "ratio", "Volatility", None),
+    ("bb_upper", "BB Upper 20", "num", "price", "Volatility", None),
+    ("bb_lower", "BB Lower 20", "num", "price", "Volatility", None),
+    ("bb_pctb", "BB %B", "num", "num", "Volatility", None),
     ("bb_width", "BB Width %", "num", "pct", "Volatility", None),
+    ("donchian_high", "Donchian Upper (20)", "num", "price", "Volatility", None),
+    ("donchian_low", "Donchian Lower (20)", "num", "price", "Volatility", None),
+    ("donchian_mid", "Donchian Middle (20)", "num", "price", "Volatility", None),
 
-    # ---- Historical Performance & High/Low Extremes ----
-    ("high_52w", "52W High", "num", "price", "Performance", None),
-    ("low_52w", "52W Low", "num", "price", "Performance", None),
-    ("from_52w_high", "From 52W High %", "num", "pct", "Performance", None),
-    ("from_52w_low", "From 52W Low %", "num", "pct", "Performance", None),
-    ("high_20d", "20D High Close", "num", "price", "Performance", None),
-    ("low_20d", "20D Low Close", "num", "price", "Performance", None),
+    # ---- Trend Following ----
+    ("supertrend", "Supertrend (10, 3.0)", "num", "price", "Trend", "supertrend_prev"),
+    ("supertrend_prev", "Supertrend (prev)", "num", "price", "Trend", None),
+    ("supertrend_dir", "Supertrend Direction (+1/-1)", "num", "int", "Trend", "supertrend_dir_prev"),
+    ("supertrend_dir_prev", "Supertrend Direction (prev)", "num", "int", "Trend", None),
+
+    # ---- Key Price Levels & Historical Extremes ----
+    ("high_20d", "20D High Close", "num", "price", "Levels", None),
+    ("low_20d", "20D Low Close", "num", "price", "Levels", None),
+    ("high_52w", "52W High", "num", "price", "Levels", None),
+    ("low_52w", "52W Low", "num", "price", "Levels", None),
+    ("from_52w_high", "% from 52W High", "num", "pct", "Levels", None),
+    ("from_52w_low", "% from 52W Low", "num", "pct", "Levels", None),
+
+    # ---- Multi-Period Trailing Performance ----
     ("chg_1w", "Perf 1W %", "num", "pct", "Performance", None),
     ("chg_1m", "Perf 1M %", "num", "pct", "Performance", None),
     ("chg_3m", "Perf 3M %", "num", "pct", "Performance", None),
@@ -136,27 +151,103 @@ PATTERNS = [
     ("bull_flag_breakout", "Bull flag breakout"),
     ("double_bottom", "Double bottom breakout (today, on volume)"),
     ("db_forming", "Double bottom forming (below neckline)"),
+    ("supertrend_buy", "Supertrend Buy Signal (bullish flip)"),
+    ("supertrend_sell", "Supertrend Sell Signal (bearish flip)"),
+    ("stoch_bull_cross", "Stochastic Bullish Cross (%K > %D)"),
+    ("stoch_bear_cross", "Stochastic Bearish Cross (%K < %D)"),
+    ("stoch_oversold", "Stochastic Oversold (%K < 20)"),
+    ("stoch_overbought", "Stochastic Overbought (%K > 80)"),
 ]
 for p, label in PATTERNS:
     _F.append((p, label, "bool", "bool", "Patterns", None))
 
+
+def _dynamic_field_spec(name):
+    """
+    On-demand schema synthesizer for arbitrary indicator periods.
+
+    Why this was written:
+    TradingView allows traders to use ANY arbitrary period (e.g. EMA 17, SMA 42, RSI 21, ATR 10).
+    This function recognizes any valid moving average, oscillator, or lookback period,
+    and returns its field specification including linked previous-day (_prev) support for crossovers.
+    """
+    m = re.fullmatch(r"(ema|sma|rsi|atr)(\d+)(_prev)?", name, re.I)
+    if m:
+        kind, n, prev = m.group(1).upper(), int(m.group(2)), bool(m.group(3))
+        if 2 <= n <= 400:
+            base = "%s%d" % (kind.lower(), n)
+            fmt = "num" if kind in ("RSI", "ATR") else "price"
+            grp = "Moving Averages" if "MA" in kind else "Oscillators"
+            return {
+                "label": "%s %d%s" % (kind, n, " (prev)" if prev else ""),
+                "type": "num",
+                "fmt": fmt,
+                "group": grp,
+                "prev": None if prev else base + "_prev",
+            }
+    m = re.fullmatch(r"(high|low)_(\d+)d(_prev)?", name, re.I)
+    if m:
+        kind, n, prev = m.group(1).lower(), int(m.group(2)), bool(m.group(3))
+        if 2 <= n <= 400:
+            base = "%s_%dd" % (kind, n)
+            return {
+                "label": "%d-Day %sest Close%s" % (n, "High" if kind == "high" else "Low", " (prev)" if prev else ""),
+                "type": "num",
+                "fmt": "price",
+                "group": "Levels",
+                "prev": None if prev else base + "_prev",
+            }
+    return None
+
+
+class DynamicFieldsDict(dict):
+    """
+    Dictionary of supported screener fields with on-demand dynamic field resolution.
+
+    Why this was written:
+    Allows user filter expressions like 'crosses_above(ema17, ema42) and rsi21 < 30' to compile
+    seamlessly without throwing 'unknown field' errors.
+    """
+    def __contains__(self, k):
+        if dict.__contains__(self, k):
+            return True
+        return _dynamic_field_spec(k) is not None
+
+    def __getitem__(self, k):
+        try:
+            return dict.__getitem__(self, k)
+        except KeyError:
+            spec = _dynamic_field_spec(k)
+            if spec is not None:
+                self[k] = spec
+                return spec
+            raise
+
+    def get(self, k, default=None):
+        if k in self:
+            return self[k]
+        return default
+
+
 # Dictionary lookup mapping field name -> metadata dict.
 # Rationale: O(1) attribute lookup for the filter compiler and HTTP /api/meta endpoint.
-FIELDS = {name: {"label": lab, "type": typ, "fmt": fmt, "group": grp, "prev": prev}
-          for name, lab, typ, fmt, grp, prev in _F}
+FIELDS = {
+    name: {"label": lab, "type": typ, "fmt": fmt, "group": grp, "prev": prev}
+    for name, lab, typ, fmt, grp, prev in _F
+}
 
 # Default columns displayed when opening the web UI for the first time.
-# Rationale: Provides an immediate overview of ticker, pricing, momentum, and sector.
 DEFAULT_COLUMNS = ["sym", "price", "change_pct", "volume", "rvol_tod", "rsi14",
                    "turnover", "from_52w_high", "industry", "exchange"]
 
 # Pre-configured trading setups available in the UI dropdown and CLI.
-# Rationale: Gives traders instant one-click access to battle-tested technical screens
-# with turnover floors (e.g., turnover > 1cr or 2cr) to eliminate illiquid penny stocks.
 PRESETS = [
     {"name": "Top gainers", "filter": "change_pct > 0 and turnover > 5cr", "sort": "change_pct", "desc": True},
     {"name": "Top losers", "filter": "change_pct < 0 and turnover > 5cr", "sort": "change_pct", "desc": False},
     {"name": "Volume shockers", "filter": "rvol_tod > 3 and turnover > 2cr", "sort": "rvol_tod", "desc": True},
+    {"name": "Supertrend Buy Flips", "filter": "supertrend_buy and turnover > 2cr", "sort": "change_pct", "desc": True},
+    {"name": "Stochastic Bullish Cross", "filter": "stoch_bull_cross and stoch_k < 30 and turnover > 2cr", "sort": "change_pct", "desc": True},
+    {"name": "Above VWAP on volume", "filter": "price > vwap and rvol_tod > 1.5 and turnover > 2cr", "sort": "change_pct", "desc": True},
     {"name": "52W high breakouts", "filter": "new_52w_high and turnover > 2cr", "sort": "change_pct", "desc": True},
     {"name": "20D breakouts on volume", "filter": "breakout_20d and rvol_tod > 1.5 and turnover > 2cr", "sort": "rvol_tod", "desc": True},
     {"name": "Double bottom (W) breakout", "filter": "double_bottom and turnover > 1cr", "sort": "db_score", "desc": True},

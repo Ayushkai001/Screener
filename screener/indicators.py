@@ -22,10 +22,11 @@ treated as zero.
 """
 
 import math
+import re
 
 # Moving average and volatility window periods
 SMA_N = (5, 10, 20, 50, 100, 200)
-EMA_N = (9, 20, 21, 50, 100, 200)
+EMA_N = (5, 9, 10, 20, 21, 50, 100, 200)
 MIN_52W_BARS = 20  # Minimum sessions required to compute a valid high/low range
 CLOSE_WINDOWS = sorted({n for n in SMA_N} | {n - 1 for n in SMA_N})
 VOL_WINDOWS = (10, 20, 50)
@@ -153,6 +154,27 @@ class Base:
         self.macd_prev = None
         self._year = None
         self._last_close_prior_year = None
+        # Supertrend (10, 3.0) state
+        self.st_atr = Rma(10)
+        self._st_lower = 0.0
+        self._st_upper = 0.0
+        self._st_dir = 1
+        self._st_val = None
+        self._st_dir_prev = 1
+        self._st_val_prev = None
+        self.supertrend = None
+        self.supertrend_prev = None
+        self.supertrend_dir = 1
+        self.supertrend_dir_prev = 1
+        # Stochastic & Donchian state
+        self.stoch_k = None
+        self.stoch_k_prev = None
+        self.stoch_d = None
+        self.stoch_d_prev = None
+        self.stoch_k_hist = []
+        self.donchian_high = None
+        self.donchian_low = None
+        self.donchian_mid = None
         # Running window sums (exactly re-summed periodically so floating-point drift cannot accumulate)
         self._cs = {w: 0.0 for w in CLOSE_WINDOWS}
         self._vs = {w: 0.0 for w in VOL_WINDOWS}
@@ -198,6 +220,23 @@ class Base:
             dx = _dx(self.pdm.v, self.mdm.v, t)
             if dx is not None:
                 self.adx.step(dx)
+
+            # Supertrend (10, 3.0) incremental calculation
+            satr = self.st_atr.step(tr)
+            if satr is not None:
+                hl2 = (h + l) / 2.0
+                up = hl2 + 3.0 * satr
+                lo = hl2 - 3.0 * satr
+                prev_c = pc
+                self._st_lower = max(lo, self._st_lower) if prev_c > self._st_lower else lo
+                self._st_upper = min(up, self._st_upper) if (prev_c < self._st_upper and self._st_upper != 0.0) else up
+                self._st_dir_prev = self._st_dir
+                if c > self._st_upper:
+                    self._st_dir = 1
+                elif c < self._st_lower:
+                    self._st_dir = -1
+                self._st_val_prev = self._st_val
+                self._st_val = self._st_lower if self._st_dir == 1 else self._st_upper
 
         # Update rolling arrays and window sums
         cs, vs, closes, vols = self._cs, self._vs, self._c, self._v
@@ -251,6 +290,44 @@ class Base:
         # Bollinger Bands: 20-period band requires prior 19 closes (20th is today's price)
         self.bb_tail = closes[-19:] if len(closes) >= 19 else None
         self.year_open_close = self._last_close_prior_year
+
+        # Finalize Supertrend closed-session values
+        self.supertrend = self._st_val
+        self.supertrend_prev = self._st_val_prev
+        self.supertrend_dir = self._st_dir
+        self.supertrend_dir_prev = self._st_dir_prev
+
+        # Finalize Stochastic Oscillator (14, 3) over closed bars
+        L = len(closes)
+        if L >= 14:
+            self.stoch_k_hist = []
+            start_idx = max(14, L - 10)
+            for i in range(start_idx, L + 1):
+                sub_c = closes[i - 1]
+                sub_h = max(highs[i - 14:i])
+                sub_l = min(lows[i - 14:i])
+                kv = ((sub_c - sub_l) / (sub_h - sub_l) * 100.0) if sub_h > sub_l else 50.0
+                self.stoch_k_hist.append(kv)
+            self.stoch_k = self.stoch_k_hist[-1]
+            self.stoch_k_prev = self.stoch_k_hist[-2] if len(self.stoch_k_hist) >= 2 else None
+            self.stoch_d = sum(self.stoch_k_hist[-3:]) / min(3, len(self.stoch_k_hist))
+            prev_hist = self.stoch_k_hist[:-1]
+            self.stoch_d_prev = sum(prev_hist[-3:]) / min(3, len(prev_hist)) if prev_hist else None
+        else:
+            self.stoch_k = None
+            self.stoch_k_prev = None
+            self.stoch_d = None
+            self.stoch_d_prev = None
+
+        # Finalize Donchian Channels (20)
+        if len(closes) >= 20:
+            self.donchian_high = max(highs[-20:])
+            self.donchian_low = min(lows[-20:])
+            self.donchian_mid = (self.donchian_high + self.donchian_low) / 2.0
+        else:
+            self.donchian_high = None
+            self.donchian_low = None
+            self.donchian_mid = None
 
 
 def _dx(pdm, mdm, tr):
@@ -401,11 +478,78 @@ def _g_vol(base, x):
         f["rvol_tod"] = rvol / x.frac
     else:
         f["rvol_tod"] = rvol
-    f["turnover"] = x.price * volume if volume is not None else None
+    turnover = x.price * volume if volume is not None else None
+    f["turnover"] = turnover
+    # Intraday VWAP: Session Volume Weighted Average Price
+    vwap = (turnover / volume) if (volume and volume > 0 and turnover) else x.price
+    f["vwap"] = vwap
+    f["vwap_pct"] = ((x.price / vwap) - 1) * 100.0 if (vwap and vwap > 0) else 0.0
     return f
 
 
-GROUPS = [_g_basic, _g_sma, _g_ema, _g_rsi, _g_macd, _g_atr, _g_adx, _g_bb, _g_range, _g_perf, _g_vol]
+def _g_supertrend(base, x):
+    if base.supertrend is None:
+        return {"supertrend": None, "supertrend_prev": None, "supertrend_dir": None,
+                "supertrend_dir_prev": None, "supertrend_buy": False, "supertrend_sell": False}
+    satr = base.st_atr.peek(x.tr)
+    st_val = base.supertrend
+    st_dir = base.supertrend_dir
+    if satr is not None:
+        hl2 = (x.hi + x.lo) / 2.0
+        up = hl2 + 3.0 * satr
+        lo = hl2 - 3.0 * satr
+        prev_c = base.prev_close or x.price
+        lo_band = max(lo, base._st_lower) if prev_c > base._st_lower else lo
+        up_band = min(up, base._st_upper) if (prev_c < base._st_upper and base._st_upper != 0.0) else up
+        if x.price > up_band:
+            st_dir = 1
+        elif x.price < lo_band:
+            st_dir = -1
+        st_val = lo_band if st_dir == 1 else up_band
+    st_buy = bool(st_dir == 1 and base.supertrend_dir == -1)
+    st_sell = bool(st_dir == -1 and base.supertrend_dir == 1)
+    return {
+        "supertrend": st_val,
+        "supertrend_prev": base.supertrend,
+        "supertrend_dir": st_dir,
+        "supertrend_dir_prev": base.supertrend_dir,
+        "supertrend_buy": st_buy,
+        "supertrend_sell": st_sell,
+    }
+
+
+def _g_stoch(base, x):
+    if len(base._h) < 13:
+        return {"stoch_k": None, "stoch_k_prev": None, "stoch_d": None, "stoch_d_prev": None}
+    h14 = max(base._h[-13:] + [x.hi])
+    l14 = min(base._l[-13:] + [x.lo])
+    k = ((x.price - l14) / (h14 - l14) * 100.0) if (h14 > l14) else 50.0
+    hist = base.stoch_k_hist[-2:] + [k]
+    d = sum(hist) / len(hist)
+    return {
+        "stoch_k": k,
+        "stoch_k_prev": base.stoch_k,
+        "stoch_d": d,
+        "stoch_d_prev": base.stoch_d,
+    }
+
+
+def _g_donchian(base, x):
+    if len(base._h) < 19:
+        return {"donchian_high": None, "donchian_low": None, "donchian_mid": None}
+    dh = max(base._h[-19:] + [x.hi])
+    dl = min(base._l[-19:] + [x.lo])
+    return {
+        "donchian_high": dh,
+        "donchian_low": dl,
+        "donchian_mid": (dh + dl) / 2.0,
+    }
+
+
+GROUPS = [
+    _g_basic, _g_sma, _g_ema, _g_rsi, _g_macd, _g_atr, _g_adx, _g_bb, _g_range, _g_perf, _g_vol,
+    _g_supertrend, _g_stoch, _g_donchian,
+]
 
 
 def live(base, price, high=None, low=None, volume=None, open_=None, prev_close=None,
@@ -426,6 +570,149 @@ def _field_groups():
 
 
 FIELD_GROUP = _field_groups()
+
+
+def calc_dynamic_indicator(base, name, price, high=None, low=None, volume=None, open_=None):
+    """
+    On-demand calculation for non-standard indicator periods (e.g. ema17, sma42, rsi21, atr10, high_35d).
+
+    Why this was written:
+    Replicates TradingView's flexibility by evaluating any moving average, RSI, or lookback period
+    dynamically on the fly rather than requiring it to be pre-baked into the engine's fixed list.
+    """
+    if not base or not base._c or price is None:
+        return None
+    # 1. EMA: ema<N>, ema<N>_prev
+    m = re.fullmatch(r"ema(\d+)(_prev)?", name, re.I)
+    if m:
+        n, prev = int(m.group(1)), bool(m.group(2))
+        if 2 <= n <= 400:
+            if n in base.ema:
+                return base.ema[n].v if prev else base.ema[n].peek(price)
+            closes = base._c
+            if len(closes) < n:
+                return None
+            alpha = 2.0 / (n + 1)
+            v = sum(closes[:n]) / n
+            for c in closes[n:]:
+                v += alpha * (c - v)
+            if not prev:
+                v += alpha * (price - v)
+            return v
+
+    # 2. SMA: sma<N>, sma<N>_prev
+    m = re.fullmatch(r"sma(\d+)(_prev)?", name, re.I)
+    if m:
+        n, prev = int(m.group(1)), bool(m.group(2))
+        if 2 <= n <= 400:
+            if n in base.sma_prev:
+                return base.sma_prev[n] if prev else ((base.sma_sum[n] + price) / n if base.sma_sum.get(n) is not None else None)
+            closes = base._c
+            if prev:
+                return sum(closes[-n:]) / n if len(closes) >= n else None
+            return (sum(closes[-(n - 1):]) + price) / n if len(closes) >= n - 1 else None
+
+    # 3. RSI: rsi<N>, rsi<N>_prev
+    m = re.fullmatch(r"rsi(\d+)(_prev)?", name, re.I)
+    if m:
+        n, prev = int(m.group(1)), bool(m.group(2))
+        if 2 <= n <= 400:
+            if n == 14 and not prev:
+                pc = base.prev_close
+                ag = base.rsi_g.peek(max(price - pc, 0.0)) if pc else None
+                al = base.rsi_l.peek(max(pc - price, 0.0)) if pc else None
+                return _rsi(ag, al)
+            elif n == 14 and prev:
+                return _rsi(base.rsi_g.v, base.rsi_l.v)
+            closes = base._c if prev else (base._c + [price])
+            if len(closes) < n + 1:
+                return None
+            g, l = Rma(n), Rma(n)
+            for a, b in zip(closes, closes[1:]):
+                ch = b - a
+                g.step(max(ch, 0.0))
+                l.step(max(-ch, 0.0))
+            return _rsi(g.v, l.v)
+
+    # 4. ATR: atr<N>, atr<N>_prev
+    m = re.fullmatch(r"atr(\d+)(_prev)?", name, re.I)
+    if m:
+        n, prev = int(m.group(1)), bool(m.group(2))
+        if 2 <= n <= 400:
+            if n == 14 and not prev:
+                tr = true_range(high or price, low or price, base.prev_close)
+                return base.atr.peek(tr)
+            elif n == 14 and prev:
+                return base.atr.v
+            highs = base._h if prev else (base._h + [high or price])
+            lows = base._l if prev else (base._l + [low or price])
+            closes = base._c if prev else (base._c + [price])
+            if len(closes) < n + 1:
+                return None
+            rma = Rma(n)
+            for i in range(1, len(closes)):
+                tr = true_range(highs[i], lows[i], closes[i - 1])
+                rma.step(tr)
+            return rma.v
+
+    # 5. High/Low lookback: high_<N>d, low_<N>d
+    m = re.fullmatch(r"(high|low)_(\d+)d(_prev)?", name, re.I)
+    if m:
+        kind, n, prev = m.group(1).lower(), int(m.group(2)), bool(m.group(3))
+        if 2 <= n <= 400:
+            closes = base._c if prev else (base._c[-(n - 1):] + [price])
+            if len(closes) < n:
+                return None
+            return max(closes[-n:]) if kind == "high" else min(closes[-n:])
+
+    return None
+
+
+class LiveRow(dict):
+    """
+    Live market row dictionary with dynamic indicator calculation on demand.
+
+    Why this was written:
+    When a user filters for 'crosses_above(ema17, ema42)', LiveRow intercepts dict lookups
+    and evaluates the 17 and 42 EMAs dynamically from the symbol's Base history cache,
+    caching the result in the row for zero-overhead re-use.
+    """
+    __slots__ = ("_base", "_price", "_hi", "_lo", "_vol", "_open")
+
+    def __init__(self, base, price=None, high=None, low=None, volume=None, open_=None, **kwargs):
+        super().__init__(**kwargs)
+        if price is not None and "price" not in self:
+            self["price"] = price
+        if open_ is not None and "open" not in self:
+            self["open"] = open_
+        if high is not None and "high" not in self:
+            self["high"] = high
+        if low is not None and "low" not in self:
+            self["low"] = low
+        if volume is not None and "volume" not in self:
+            self["volume"] = volume
+        self._base = base
+        self._price = self.get("price")
+        self._hi = self.get("high")
+        self._lo = self.get("low")
+        self._vol = self.get("volume")
+        self._open = self.get("open")
+
+    def get(self, k, default=None):
+        if k in self:
+            return dict.__getitem__(self, k)
+        if self._base and self.get("hist_ok", True):
+            v = calc_dynamic_indicator(self._base, k, self._price, self._hi, self._lo, self._vol, self._open)
+            if v is not None:
+                self[k] = v
+                return v
+        return default
+
+    def __getitem__(self, k):
+        val = self.get(k)
+        if val is None and k not in self:
+            raise KeyError(k)
+        return val
 
 
 class LazyRow(dict):
@@ -451,5 +738,17 @@ class LazyRow(dict):
         if g is not None and g not in self._done:
             self._done.add(g)
             self.update(g(self._base, self._x))
-            return dict.get(self, k, default)
+            if k in self:
+                return dict.__getitem__(self, k)
+        if self._base:
+            v = calc_dynamic_indicator(self._base, k, self._x.price, self._x.hi, self._x.lo, self._x.volume, self._x.open_)
+            if v is not None:
+                self[k] = v
+                return v
         return default
+
+    def __getitem__(self, k):
+        val = self.get(k)
+        if val is None and k not in self:
+            raise KeyError(k)
+        return val
