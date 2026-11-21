@@ -102,6 +102,29 @@ section.blk:first-child { border-top: 0; padding-top: 14px; }
   background: var(--down-soft); border: 1px solid color-mix(in srgb, var(--down) 30%, transparent); }
 .err:empty { display: none; }
 
+/* Visual Strategy Builder Cards */
+.card-block { border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 12px; background: var(--panel); overflow: hidden; transition: border-color .15s; }
+.card-block.long { border-left: 3px solid #22c55e; }
+.card-block.short { border-left: 3px solid #ef4444; }
+.card-block-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--field); border-bottom: 1px solid var(--line); }
+.card-block-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 12.5px; color: var(--text); }
+.card-block-body { padding: 10px 10px 6px; }
+.badge { display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 4px; font-size: 10.5px; font-weight: 600; letter-spacing: .02em; }
+.badge-long { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+.badge-short { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.badge-freq { background: rgba(16, 185, 129, 0.12); color: #10b981; }
+.badge-crossover { background: rgba(168, 85, 247, 0.15); color: #a855f7; font-size: 9.5px; text-transform: uppercase; font-weight: 600; }
+.badge-logical { background: rgba(59, 130, 246, 0.15); color: #3b82f6; font-size: 9.5px; text-transform: uppercase; font-weight: 600; }
+.badge-level { background: rgba(245, 158, 11, 0.15); color: #f59e0b; font-size: 9.5px; text-transform: uppercase; font-weight: 600; }
+.quick-palette { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 0 4px; border-top: 1px dashed var(--line); margin-top: 8px; }
+.chip-btn { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 3px 8px; font-size: 11px; cursor: pointer; color: var(--text-2); display: inline-flex; align-items: center; gap: 4px; transition: all .15s; }
+.chip-btn:hover { background: var(--panel); color: var(--accent); border-color: var(--accent); }
+.risk-topbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 10px; background: var(--field); border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 12px; }
+.risk-item { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; }
+.risk-item select { height: 26px; padding: 0 18px 0 6px; font-size: 11.5px; }
+.risk-item input[type=number] { height: 26px; width: 56px; padding: 0 6px; font-size: 11.5px; }
+.chart-mode-seg button.on { background: var(--accent); color: #fff; }
+
 main { padding: 18px 20px 48px; min-width: 0; }
 main > .card, #results > .card { margin-bottom: 16px; }
 .chead { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
@@ -225,37 +248,123 @@ tbody tr.sel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
     </section>
 
     <section class="blk">
-      <h3><span class="step">2</span>Entry conditions</h3>
-      <div id="entryG"></div>
-      <div class="thenrow">
-        <span class="subtle">Then</span><span class="pill">BUY</span>
-        <select id="emode" aria-label="Entry fill">
-          <option value="next_open">at the next open</option>
-          <option value="buy_stop">on a break above the signal day's high</option>
-          <option value="signal_close">at the signal close (optimistic)</option>
-        </select>
+      <h3><span class="step">2</span>Strategy Execution</h3>
+      <div class="seg" id="actionSeg" style="margin-bottom:10px">
+        <button class="on" data-a="BUY" type="button">Long (Buy)</button>
+        <button data-a="SHORT" type="button">Short (Sell)</button>
+        <button data-a="BOTH" type="button">Both (Long &amp; Short)</button>
       </div>
-      <div id="bsBox" class="hint" hidden>Buy-stop stays active for <input type="number" id="bsDays" min="1" max="60" style="width:52px;padding:2px 4px"> sessions.</div>
+
+      <!-- Quick Risk Bar at the top (Stop Loss / Take Profit / Trailing Stop) -->
+      <div class="risk-topbar" id="riskTopBar">
+        <div class="risk-item">
+          <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="chkStop" checked> <b>Stop Loss</b></label>
+          <select id="stopT"><option value="pct">%</option><option value="atr">ATR</option><option value="level">Level</option><option value="none">Off</option></select>
+          <span id="stopV" data-name="Stop loss"></span>
+        </div>
+        <div class="risk-item">
+          <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="chkTgt" checked> <b>Take Profit</b></label>
+          <select id="tgtT"><option value="pct">%</option><option value="r">R</option><option value="atr">ATR</option><option value="level">Level</option><option value="none">Off</option></select>
+          <span id="tgtV" data-name="Take profit"></span>
+        </div>
+        <div class="risk-item">
+          <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="chkTrl"> <b>Trailing Stop</b></label>
+          <select id="trlT"><option value="none">Off</option><option value="pct">%</option><option value="atr">ATR</option></select>
+          <span id="trlV" data-name="Trailing stop"></span>
+        </div>
+      </div>
+
+      <!-- Long Entry Card -->
+      <div class="card-block long" id="blockLongEntry">
+        <div class="card-block-head">
+          <div class="card-block-title">
+            <span>Long Entry</span>
+            <span class="badge badge-long">Long</span>
+            <span class="badge badge-freq">1x/bar</span>
+          </div>
+          <div class="tools">
+            <span class="subtle" style="font-size:11px">Fill:</span>
+            <select id="emode" style="height:24px;font-size:11px">
+              <option value="next_open">Next Open</option>
+              <option value="buy_stop">Break High</option>
+              <option value="signal_close">Signal Close</option>
+            </select>
+          </div>
+        </div>
+        <div class="card-block-body">
+          <div id="entryG"></div>
+          <div class="quick-palette">
+            <button class="chip-btn" type="button" onclick="quickAdd('entry', 'crosses_above')">+ Crossover</button>
+            <button class="chip-btn" type="button" onclick="quickAdd('entry', 'crosses_below')">+ Cross Below</button>
+            <button class="chip-btn" type="button" onclick="quickAdd('entry', '>')">+ Comparison</button>
+            <button class="chip-btn" type="button" onclick="quickAdd('entry', 'between')">+ In Range</button>
+            <button class="chip-btn" type="button" onclick="quickAddPattern('entry')">+ Pattern</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Short Entry Card -->
+      <div class="card-block short" id="blockShortEntry" style="display:none">
+        <div class="card-block-head">
+          <div class="card-block-title">
+            <span>Short Entry</span>
+            <span class="badge badge-short">Short</span>
+            <span class="badge badge-freq">1x/bar</span>
+          </div>
+          <div class="tools">
+            <span class="subtle" style="font-size:11px">Fill: Next Open</span>
+          </div>
+        </div>
+        <div class="card-block-body">
+          <div id="entryShortG"></div>
+          <div class="quick-palette">
+            <button class="chip-btn" type="button" onclick="quickAdd('entry_short', 'crosses_below')">+ Cross Below</button>
+            <button class="chip-btn" type="button" onclick="quickAdd('entry_short', 'crosses_above')">+ Crossover</button>
+            <button class="chip-btn" type="button" onclick="quickAdd('entry_short', '<')">+ Comparison</button>
+            <button class="chip-btn" type="button" onclick="quickAdd('entry_short', 'between')">+ In Range</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Exit 1 (Long Exit) Card -->
+      <div class="card-block long" id="blockLongExit">
+        <div class="card-block-head">
+          <div class="card-block-title">
+            <span>Exit 1 (Close Long)</span>
+            <span class="badge badge-long">Long</span>
+          </div>
+        </div>
+        <div class="card-block-body">
+          <div id="exitG"></div>
+          <div class="quick-palette">
+            <button class="chip-btn" type="button" onclick="quickAdd('exit', 'crosses_below')">+ Cross Below</button>
+            <button class="chip-btn" type="button" onclick="quickAdd('exit', '<')">+ Comparison</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Exit 2 (Short Exit) Card -->
+      <div class="card-block short" id="blockShortExit" style="display:none">
+        <div class="card-block-head">
+          <div class="card-block-title">
+            <span>Exit 2 (Cover Short)</span>
+            <span class="badge badge-short">Short</span>
+          </div>
+        </div>
+        <div class="card-block-body">
+          <div id="exitShortG"></div>
+          <div class="quick-palette">
+            <button class="chip-btn" type="button" onclick="quickAdd('exit_short', 'crosses_above')">+ Crossover</button>
+            <button class="chip-btn" type="button" onclick="quickAdd('exit_short', '>')">+ Comparison</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="lvl"><label for="hold" class="subtle">Max hold days</label><input type="number" id="hold" min="0" placeholder="no limit"><span class="hint" style="margin:0">0 = no limit</span></div>
     </section>
 
     <section class="blk">
-      <h3><span class="step">3</span>Exit &amp; risk</h3>
-      <div class="lvl"><label for="stopT" class="subtle">Stop loss</label>
-        <select id="stopT"><option value="none">None</option><option value="pct">% below entry</option><option value="atr">× ATR 14</option><option value="level">At a level</option></select>
-        <span id="stopV" data-name="Stop loss"></span></div>
-      <div class="lvl"><label for="tgtT" class="subtle">Take profit</label>
-        <select id="tgtT"><option value="none">None</option><option value="pct">% above entry</option><option value="r">× risk (R)</option><option value="atr">× ATR 14</option><option value="level">At a level</option></select>
-        <span id="tgtV" data-name="Take profit"></span></div>
-      <div class="lvl"><label for="trlT" class="subtle">Trailing stop</label>
-        <select id="trlT"><option value="none">None</option><option value="pct">% below high</option><option value="atr">× ATR below high</option></select>
-        <span id="trlV" data-name="Trailing stop"></span></div>
-      <div class="lvl"><label for="hold" class="subtle">Max days held</label><input type="number" id="hold" min="0" placeholder="no limit"><span class="hint" style="margin:0">0 = no limit</span></div>
-      <div class="l" id="exitLbl">Also exit (at the next open) when</div>
-      <div id="exitG"></div>
-    </section>
-
-    <section class="blk">
-      <h3><span class="step">4</span>Sizing &amp; costs</h3>
+      <h3><span class="step">3</span>Sizing &amp; costs</h3>
       <div class="row2">
         <div><label class="l" for="sizing">Position size</label>
           <select id="sizing"><option value="equal">All-in / equal slots</option><option value="risk">Fixed risk per trade</option></select></div>
@@ -292,6 +401,10 @@ tbody tr.sel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
       <span class="sym" id="cSym">—</span><span class="nm" id="cName"></span><span class="px" id="cPx"></span>
       <span class="spacer"></span>
       <div class="tools">
+        <div class="seg chart-mode-seg" id="chartModeSeg" style="display:inline-flex;margin-right:8px">
+          <button class="btn small on" id="btnLwChart" type="button" title="Interactive Lightweight Chart with strategy execution markers">⚡ Lightweight</button>
+          <button class="btn small" id="btnTvChart" type="button" title="Official TradingView Advanced Chart with indicators, drawing tools and timeframes">📊 TradingView</button>
+        </div>
         <button class="btn small" id="drawLevel" title="Click the chart to place a price level and turn it into a rule">Draw level</button>
         <button class="btn small" id="drawZone" title="Click twice to mark a zone and turn it into a rule">Draw zone</button>
         <button class="btn small" id="range1y">1Y</button>
@@ -302,6 +415,9 @@ tbody tr.sel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
     <div class="chartbox">
       <div id="chart"></div>
       <div id="pane" hidden></div>
+      <div id="tvChartBox" style="display:none;width:100%;height:520px;border-radius:var(--r);overflow:hidden">
+        <div id="tv_chart_container" style="width:100%;height:100%"></div>
+      </div>
       <div class="drawhint" id="drawHint" hidden></div>
       <div class="pop" id="pop" role="dialog" aria-label="Turn the drawing into a rule" hidden></div>
     </div>
@@ -318,6 +434,7 @@ tbody tr.sel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 </main>
 </div>
 <script src="/vendor/lightweight-charts.js"></script>
+<script src="https://s3.tradingview.com/tv.js"></script>
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
@@ -358,6 +475,7 @@ document.documentElement.dataset.theme = theme;
 $("theme").onclick = () => {
   const t = document.documentElement.dataset.theme === "light" ? "dark" : "light";
   document.documentElement.dataset.theme = t; store.set("theme", t); styleCharts();
+  if (currentChartMode === "tv") renderTvChart(chartSymbol());
 };
 const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
 
@@ -432,10 +550,10 @@ function condEl(c, parent, rerender) {
     s.onchange = () => { c.pattern = s.value; changed(); };
     const n = el("select"); n.appendChild(opt("0", "is true", !c.negate)); n.appendChild(opt("1", "is false", c.negate));
     n.onchange = () => { c.negate = n.value === "1"; changed(); };
-    row.append(el("span", "subtle", "Pattern"), s, n, del);
+    row.append(el("span", "badge badge-level", "Pattern"), s, n, del);
     return row;
   }
-  if (c.source === "chart") row.appendChild(el("span", "tag", "chart"));
+  if (c.source === "chart") row.appendChild(el("span", "badge badge-level", "Level"));
   row.appendChild(operandEl(c.left, "left", rerender));
   const op = el("select"); op.setAttribute("aria-label", "comparison");
   const cx = crossable(c.left);
@@ -459,8 +577,50 @@ function condEl(c, parent, rerender) {
   row.appendChild(op);
   if (c.right) row.appendChild(operandEl(c.right, "right", rerender));
   if (c.op === "between" && c.right2) { row.appendChild(el("span", "subtle", "and")); row.appendChild(operandEl(c.right2, "right2", rerender)); }
+
+  let bCls = "badge-logical", bTxt = "Logical";
+  if (c.op && c.op.startsWith("crosses")) { bCls = "badge-crossover"; bTxt = "Crossover"; }
+  else if (c.op === "between") { bCls = "badge-logical"; bTxt = "Range"; }
+  row.appendChild(el("span", "badge " + bCls, bTxt));
+
   row.appendChild(del);
   return row;
+}
+
+function ensureGroup(target) {
+  if (target === "entry") { if (!S.entry) S.entry = { type: "group", op: "and", negate: false, items: [] }; return S.entry; }
+  if (target === "exit") { if (!S.exit) S.exit = { type: "group", op: "or", negate: false, items: [] }; return S.exit; }
+  if (target === "entry_short") { if (!S.entry_short) S.entry_short = { type: "group", op: "and", negate: false, items: [] }; return S.entry_short; }
+  if (target === "exit_short") { if (!S.exit_short) S.exit_short = { type: "group", op: "or", negate: false, items: [] }; return S.exit_short; }
+  return S.entry;
+}
+
+function quickAdd(target, op) {
+  const isShort = target.includes("short");
+  let left = newInd("close");
+  let right = newInd("ema", { period: 20 });
+  if (op.startsWith("crosses")) {
+    left = newInd("ema", { period: 9 });
+    right = newInd("ema", { period: 21 });
+  } else if (op === "between") {
+    left = newInd("rsi", { period: 14 });
+    right = { kind: "value", value: 30 };
+    const right2 = { kind: "value", value: 70 };
+    ensureGroup(target).items.push({ type: "cond", left, op, right, right2 });
+    renderGroups(); changed();
+    return;
+  } else if (op === ">" || op === "<") {
+    left = newInd("rsi", { period: 14 });
+    right = { kind: "value", value: isShort ? 45 : 55 };
+  }
+  ensureGroup(target).items.push({ type: "cond", left, op, right });
+  renderGroups(); changed();
+}
+
+function quickAddPattern(target) {
+  const p = (CAT.patterns && CAT.patterns[0]) ? CAT.patterns[0].id : "double_bottom";
+  ensureGroup(target).items.push({ type: "pattern", pattern: p, negate: false });
+  renderGroups(); changed();
 }
 
 function groupEl(g, parent, rerender, depth) {
@@ -503,11 +663,43 @@ function groupEl(g, parent, rerender, depth) {
 }
 
 function renderGroups() {
-  const ent = $("entryG"); ent.replaceChildren(groupEl(S.entry, null, renderGroups, 0));
-  if (!S.exit) S.exit = { type: "group", op: "or", negate: false, items: [] };
-  $("exitG").replaceChildren(groupEl(S.exit, null, renderGroups, 0));
-  $("entryG").firstChild.setAttribute("role", "group"); $("entryG").firstChild.setAttribute("aria-label", "Entry conditions");
-  $("exitG").firstChild.setAttribute("role", "group"); $("exitG").firstChild.setAttribute("aria-labelledby", "exitLbl");
+  const act = S.action || "BUY";
+  const showLong = act === "BUY" || act === "BOTH";
+  const showShort = act === "SHORT" || act === "BOTH";
+
+  $("blockLongEntry").style.display = showLong ? "" : "none";
+  $("blockLongExit").style.display = showLong ? "" : "none";
+  $("blockShortEntry").style.display = showShort ? "" : "none";
+  $("blockShortExit").style.display = showShort ? "" : "none";
+
+  if (showLong) {
+    if (!S.entry) S.entry = { type: "group", op: "and", negate: false, items: [] };
+    $("entryG").replaceChildren(groupEl(S.entry, null, renderGroups, 0));
+    if (!S.exit) S.exit = { type: "group", op: "or", negate: false, items: [] };
+    $("exitG").replaceChildren(groupEl(S.exit, null, renderGroups, 0));
+    if ($("entryG").firstChild) {
+      $("entryG").firstChild.setAttribute("role", "group");
+      $("entryG").firstChild.setAttribute("aria-label", "Long entry conditions");
+    }
+    if ($("exitG").firstChild) {
+      $("exitG").firstChild.setAttribute("role", "group");
+      $("exitG").firstChild.setAttribute("aria-label", "Long exit conditions");
+    }
+  }
+  if (showShort) {
+    if (!S.entry_short) S.entry_short = { type: "group", op: "and", negate: false, items: [] };
+    if (!S.exit_short) S.exit_short = { type: "group", op: "or", negate: false, items: [] };
+    $("entryShortG").replaceChildren(groupEl(S.entry_short, null, renderGroups, 0));
+    $("exitShortG").replaceChildren(groupEl(S.exit_short, null, renderGroups, 0));
+    if ($("entryShortG").firstChild) {
+      $("entryShortG").firstChild.setAttribute("role", "group");
+      $("entryShortG").firstChild.setAttribute("aria-label", "Short entry conditions");
+    }
+    if ($("exitShortG").firstChild) {
+      $("exitShortG").firstChild.setAttribute("role", "group");
+      $("exitShortG").firstChild.setAttribute("aria-label", "Short exit conditions");
+    }
+  }
 }
 
 // ---------- level inputs (stop / target / trail) ----------
@@ -534,18 +726,31 @@ function levelEl(spec, box) {
   n.oninput = () => { spec.value = n.value === "" ? null : +n.value; changed(); };
   box.appendChild(n);
 }
-function bindLevel(selId, boxId, key, defaults) {
-  const s = $(selId);
+function bindLevel(selId, boxId, chkId, key, defaults) {
+  const s = $(selId), chk = $(chkId);
   s.onchange = () => {
     const spec = S.risk[key] = { type: s.value };
     if (s.value !== "none" && s.value !== "level") spec.value = defaults[s.value];
+    if (chk) chk.checked = s.value !== "none";
     levelEl(spec, $(boxId)); changed();
   };
+  if (chk) {
+    chk.onchange = () => {
+      if (!chk.checked) {
+        s.value = "none";
+      } else if (s.value === "none") {
+        s.value = "pct";
+      }
+      s.dispatchEvent(new Event("change"));
+    };
+  }
 }
 
 // ---------- form <-> IR ----------
 function fillForm() {
   $("name").value = S.name || "";
+  const act = S.action || "BUY";
+  for (const b of $("actionSeg").children) b.classList.toggle("on", b.dataset.a === act);
   const mode = S.instrument.mode || "symbol";
   for (const b of $("modeSeg").children) b.classList.toggle("on", b.dataset.v === mode);
   $("symBox").hidden = mode !== "symbol"; $("uniBox").hidden = mode !== "universe";
@@ -557,9 +762,11 @@ function fillForm() {
   $("emode").value = S.execution.entry_mode || "next_open";
   $("bsBox").hidden = $("emode").value !== "buy_stop";
   $("bsDays").value = S.execution.entry_valid_days || 1;
-  for (const [sel, box, key] of [["stopT", "stopV", "stop"], ["tgtT", "tgtV", "target"], ["trlT", "trlV", "trail"]]) {
+  for (const [sel, box, chk, key] of [["stopT", "stopV", "chkStop", "stop"], ["tgtT", "tgtV", "chkTgt", "target"], ["trlT", "trlV", "chkTrl", "trail"]]) {
     S.risk[key] = S.risk[key] || { type: "none" };
-    $(sel).value = S.risk[key].type; levelEl(S.risk[key], $(box));
+    $(sel).value = S.risk[key].type || "none";
+    if ($(chk)) $(chk).checked = S.risk[key].type && S.risk[key].type !== "none";
+    levelEl(S.risk[key], $(box));
   }
   $("hold").value = S.risk.max_hold || "";
   $("sizing").value = S.portfolio.sizing || "equal";
@@ -580,6 +787,16 @@ function fillForm() {
 function bindForm() {
   const num = (id, fn) => { $(id).oninput = () => { fn($(id).value === "" ? null : +$(id).value); changed(); }; };
   $("name").oninput = () => { S.name = $("name").value; changed(); };
+  for (const b of $("actionSeg").children) b.onclick = () => {
+    for (const ob of $("actionSeg").children) ob.classList.remove("on");
+    b.classList.add("on");
+    S.action = b.dataset.a;
+    if (S.action === "SHORT" || S.action === "BOTH") {
+      if (!S.entry_short) S.entry_short = { type: "group", op: "and", negate: false, items: [] };
+      if (!S.exit_short) S.exit_short = { type: "group", op: "or", negate: false, items: [] };
+    }
+    renderGroups(); changed();
+  };
   for (const b of $("modeSeg").children) b.onclick = () => {
     S.instrument.mode = b.dataset.v;
     if (b.dataset.v === "universe") {
@@ -594,9 +811,9 @@ function bindForm() {
   num("cap", v => S.portfolio.capital = v);
   $("emode").onchange = () => { S.execution.entry_mode = $("emode").value; $("bsBox").hidden = $("emode").value !== "buy_stop"; changed(); };
   num("bsDays", v => S.execution.entry_valid_days = v);
-  bindLevel("stopT", "stopV", "stop", { pct: 3, atr: 2 });
-  bindLevel("tgtT", "tgtV", "target", { pct: 6, atr: 4, r: 2 });
-  bindLevel("trlT", "trlV", "trail", { pct: 8, atr: 3 });
+  bindLevel("stopT", "stopV", "chkStop", "stop", { pct: 3, atr: 2 });
+  bindLevel("tgtT", "tgtV", "chkTgt", "target", { pct: 6, atr: 4, r: 2 });
+  bindLevel("trlT", "trlV", "chkTrl", "trail", { pct: 8, atr: 3 });
   num("hold", v => S.risk.max_hold = v || 0);
   $("sizing").onchange = () => { S.portfolio.sizing = $("sizing").value; $("riskBox").style.visibility = $("sizing").value === "risk" ? "visible" : "hidden"; changed(); };
   num("riskPct", v => S.portfolio.risk_pct = v);
@@ -701,7 +918,72 @@ function styleCharts() {
   for (const c of [chart, pane, eqChart]) if (c) c.applyOptions(chartOpts());
   if (candle) candle.applyOptions({ upColor: css("--up"), downColor: css("--down"), wickUpColor: css("--up"), wickDownColor: css("--down") });
 }
+function getTvSymbol(ysym) {
+  if (!ysym) return "NSE:NIFTY";
+  if (ysym === "^NSEI") return "NSE:NIFTY";
+  if (ysym === "^NSEBANK") return "NSE:BANKNIFTY";
+  if (ysym === "^BSESN") return "BSE:SENSEX";
+  if (ysym === "^CNXIT") return "NSE:NIFTYIT";
+  if (ysym.endsWith(".NS")) return "NSE:" + ysym.slice(0, -3);
+  if (ysym.endsWith(".BO")) return "BSE:" + ysym.slice(0, -3);
+  if (ysym === "BTC-USD") return "BINANCE:BTCUSDT";
+  return ysym;
+}
+
+let currentChartMode = "lw"; // "lw" or "tv"
+let tvWidget = null;
+
+function renderTvChart(ysym) {
+  const container = $("tv_chart_container");
+  if (!container) return;
+  container.replaceChildren();
+  const sym = getTvSymbol(ysym || chartSymbol());
+  const theme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  if (typeof TradingView !== "undefined" && TradingView.widget) {
+    try {
+      tvWidget = new TradingView.widget({
+        autosize: true,
+        symbol: sym,
+        interval: "D",
+        timezone: "Asia/Kolkata",
+        theme: theme,
+        style: "1",
+        locale: "en",
+        toolbar_bg: theme === "light" ? "#f1f3f6" : "#131722",
+        enable_publishing: false,
+        allow_symbol_change: true,
+        container_id: "tv_chart_container",
+        hide_side_toolbar: false,
+      });
+      return;
+    } catch {}
+  }
+  const ifr = document.createElement("iframe");
+  ifr.src = `https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(sym)}&interval=D&theme=${theme}&style=1&timezone=Asia%2FKolkata`;
+  ifr.style.width = "100%";
+  ifr.style.height = "100%";
+  ifr.style.border = "none";
+  container.appendChild(ifr);
+}
+
+function setChartMode(mode) {
+  currentChartMode = mode;
+  const isTv = mode === "tv";
+  $("btnLwChart").classList.toggle("on", !isTv);
+  $("btnTvChart").classList.toggle("on", isTv);
+  $("chart").style.display = isTv ? "none" : "";
+  $("pane").style.display = isTv ? "none" : "";
+  $("tvChartBox").style.display = isTv ? "block" : "none";
+  $("drawLevel").style.display = isTv ? "none" : "";
+  $("drawZone").style.display = isTv ? "none" : "";
+  if (isTv) {
+    renderTvChart(chartSymbol());
+  }
+}
+
 function initChart() {
+  $("btnLwChart").onclick = () => setChartMode("lw");
+  $("btnTvChart").onclick = () => setChartMode("tv");
   chart = LightweightCharts.createChart($("chart"), chartOpts());
   candle = chart.addCandlestickSeries({ upColor: css("--up"), downColor: css("--down"), borderVisible: false,
     wickUpColor: css("--up"), wickDownColor: css("--down") });
@@ -733,6 +1015,7 @@ function chartSymbol() {
 let chartSeq = 0;
 async function loadChart(ysym) {
   if (!ysym) return;
+  if (currentChartMode === "tv") renderTvChart(ysym);
   const seq = ++chartSeq;
   const fields = compiled ? compiled.chart_fields : [];
   const key = fields.map(f => f.field).join(",");
@@ -871,9 +1154,16 @@ function drawMarkers() {
   const ms = [];
   for (const t of tradesFor(chartData.ysym)) {
     const win = (t.pnl ?? t.net_pct ?? 0) >= 0;
-    ms.push({ time: t.entry_date, position: "belowBar", color: css("--accent"), shape: "arrowUp", text: "B" });
-    if (t.reason !== "end") ms.push({ time: t.exit_date, position: "aboveBar", color: win ? css("--up") : css("--down"), shape: "arrowDown",
-      text: { stop: "SL", target: "TP", trail: "TS", time: "T", rule: "X", end: "open" }[t.reason] || t.reason });
+    const isShort = t.side === "short";
+    if (isShort) {
+      ms.push({ time: t.entry_date, position: "aboveBar", color: "#f97316", shape: "arrowDown", text: "S" });
+      if (t.reason !== "end") ms.push({ time: t.exit_date, position: "belowBar", color: win ? css("--up") : css("--down"), shape: "arrowUp",
+        text: { stop: "SL", target: "TP", trail: "TS", time: "T", rule: "X", end: "open" }[t.reason] || t.reason });
+    } else {
+      ms.push({ time: t.entry_date, position: "belowBar", color: css("--accent"), shape: "arrowUp", text: "B" });
+      if (t.reason !== "end") ms.push({ time: t.exit_date, position: "aboveBar", color: win ? css("--up") : css("--down"), shape: "arrowDown",
+        text: { stop: "SL", target: "TP", trail: "TS", time: "T", rule: "X", end: "open" }[t.reason] || t.reason });
+    }
   }
   ms.sort((a, b) => a.time < b.time ? -1 : a.time > b.time ? 1 : 0);
   candle.setMarkers(ms.filter(m => chartData.byDate[m.time] != null));
@@ -998,14 +1288,17 @@ function showResult(res) {
   const tw = el("div", "tablewrap"); const tt = el("table");
   const multi = !res.spec.symbols || res.spec.symbols.length > 1;
   tt.innerHTML = "<thead><tr><th class='t'>#</th>" + (multi ? "<th class='t'>Symbol</th>" : "") +
-    "<th class='t'>Entry</th><th>Price</th><th class='t'>Exit</th><th>Price</th><th class='t'>Why</th><th>Days</th><th>Qty</th><th>P&amp;L</th><th>P&amp;L %</th><th>R</th></tr></thead>";
+    "<th class='t'>Side</th><th class='t'>Entry</th><th>Price</th><th class='t'>Exit</th><th>Price</th><th class='t'>Why</th><th>Days</th><th>Qty</th><th>P&amp;L</th><th>P&amp;L %</th><th>R</th></tr></thead>";
   const tb = el("tbody"); tb.id = "tradeRows";
   const why = { stop: "Stop loss", target: "Target", trail: "Trailing stop", time: "Max days", rule: "Exit rule", end: "Still open" };
   taken.slice().reverse().forEach((t, k) => {
     const tr = el("tr"); tr._t = t;
     tr.append(el("td", "t subtle", taken.length - k));
     if (multi) tr.append(el("td", "t", (t.sym || "").replace(/\.(NS|BO)$/, "")));
-    tr.append(el("td", "t", t.entry_date), el("td", null, fprice(t.entry)), el("td", "t", t.reason === "end" ? "—" : t.exit_date),
+    const sideTd = el("td", "t");
+    const isShort = t.side === "short";
+    sideTd.appendChild(el("span", "badge " + (isShort ? "badge-short" : "badge-long"), isShort ? "Short" : "Long"));
+    tr.append(sideTd, el("td", "t", t.entry_date), el("td", null, fprice(t.entry)), el("td", "t", t.reason === "end" ? "—" : t.exit_date),
       el("td", null, fprice(t.exit)), el("td", "t", why[t.reason] || t.reason), el("td", null, t.bars),
       el("td", null, f0.format(t.shares)), el("td", sgn(t.pnl), t.pnl == null ? "open" : money(t.pnl)),
       el("td", sgn(t.pnl_pct), fpct(t.pnl_pct, 2)), el("td", sgn(t.net_r), t.net_r == null ? "—" : fnum(t.net_r, 2)));
@@ -1014,7 +1307,7 @@ function showResult(res) {
     tr.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); focusTrade(t); } };
     tb.append(tr);
   });
-  if (!taken.length) { const tr = el("tr"); const td = el("td", "t subtle", "No trades. Loosen the entry conditions or widen the period."); td.colSpan = 12; tr.append(td); tb.append(tr); }
+  if (!taken.length) { const tr = el("tr"); const td = el("td", "t subtle", "No trades. Loosen the entry conditions or widen the period."); td.colSpan = 13; tr.append(td); tb.append(tr); }
   tt.append(tb); tw.append(tt); tc.append(tw); out.append(tc);
   // equity chart
   if (eqChart) { eqChart.remove(); eqChart = null; }

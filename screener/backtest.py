@@ -311,7 +311,7 @@ def prepare(spec):
         raise SpecError("an entry rule is required, e.g. crosses_above(ema9, ema21) and turnover > 5cr")
     level_srcs = [v.partition(":")[2] for v in (s.get("stop"), s.get("target"))
                   if isinstance(v, str) and v.strip().lower().startswith("expr:")]
-    s["_custom"] = custom_fields(s["entry"], s.get("exit"),
+    s["_custom"] = custom_fields(s["entry"], s.get("exit"), s.get("entry_short"), s.get("exit_short"),
                                  s["entry_level"] if s["entry_mode"] == "buy_stop" else "", *level_srcs)
     fields = _bt_fields(s["_custom"])
     used = set()
@@ -319,6 +319,12 @@ def prepare(spec):
     used |= u
     if (s.get("exit") or "").strip():
         _, u = expr.compile_filter(s["exit"], fields)
+        used |= u
+    if (s.get("entry_short") or "").strip():
+        _, u = expr.compile_filter(s["entry_short"], fields)
+        used |= u
+    if (s.get("exit_short") or "").strip():
+        _, u = expr.compile_filter(s["exit_short"], fields)
         used |= u
     if s["entry_mode"] not in ("next_open", "signal_close", "buy_stop"):
         raise SpecError("entry_mode must be next_open, signal_close or buy_stop")
@@ -383,6 +389,9 @@ class _Compiled:
         self.custom = s.get("_custom") or []
         self.entry, _ = expr.compile_filter(s["entry"], fields)
         self.exit = expr.compile_filter(s["exit"], fields)[0] if (s.get("exit") or "").strip() else None
+        self.action = (s.get("action") or "BUY").upper()
+        self.entry_short = expr.compile_filter(s["entry_short"], fields)[0] if (s.get("entry_short") or "").strip() else None
+        self.exit_short = expr.compile_filter(s["exit_short"], fields)[0] if (s.get("exit_short") or "").strip() else None
         self.entry_level = expr.compile_value(s["entry_level"], fields)[0] if s["entry_mode"] == "buy_stop" else None
         self.stop = s["_stop"]
         self.target = s["_target"]
@@ -427,7 +436,7 @@ def _row(base, bar, bars, t, info, need_static, need_flags, cust=None):
     return row
 
 
-def _levels(cp, sig, entry):
+def _levels(cp, sig, entry, side="long"):
     """
     Compute stop-loss and profit-target price levels for a fill at `entry`.
 
@@ -436,40 +445,52 @@ def _levels(cp, sig, entry):
     - Percentage stops/targets scale relative to fill entry price.
     - ATR stops/targets use the signal day's ATR value.
     - Risk multiple targets (r:N) scale relative to the distance from entry to stop (R = entry - stop).
-    - Validates that stop < entry and target > entry; returns None if trade geometry is invalid.
+    - Supports both Long (stop < entry, target > entry) and Short (stop > entry, target < entry).
     """
     k, x = cp.stop
     if k == "none":
         stop = None
     elif k == "pct":
-        stop = entry * (1 - x / 100.0)
+        stop = entry * (1 - x / 100.0) if side == "long" else entry * (1 + x / 100.0)
     elif k == "atr":
-        stop = entry - x * sig["atr"] if sig["atr"] else None
-        if stop is None:
+        diff = x * sig["atr"] if sig["atr"] else None
+        if diff is None:
             return None
+        stop = entry - diff if side == "long" else entry + diff
     else:
         stop = sig["stop"]
         if stop is None:
             return None
-    if stop is not None and stop >= entry:
-        return None
+    if stop is not None:
+        if side == "long" and stop >= entry:
+            return None
+        if side == "short" and stop <= entry:
+            return None
+
     k, x = cp.target
     if k == "none":
         target = None
     elif k == "pct":
-        target = entry * (1 + x / 100.0)
+        target = entry * (1 + x / 100.0) if side == "long" else entry * (1 - x / 100.0)
     elif k == "atr":
-        target = entry + x * sig["atr"] if sig["atr"] else None
-        if target is None:
+        diff = x * sig["atr"] if sig["atr"] else None
+        if diff is None:
             return None
+        target = entry + diff if side == "long" else entry - diff
     elif k == "r":
-        target = entry + x * (entry - stop)
+        risk = (entry - stop) if side == "long" else (stop - entry)
+        if risk is None or risk <= 0:
+            return None
+        target = entry + x * risk if side == "long" else entry - x * risk
     else:
         target = sig["target"]
         if target is None:
             return None
-    if target is not None and target <= entry:
-        return None
+    if target is not None:
+        if side == "long" and target <= entry:
+            return None
+        if side == "short" and target >= entry:
+            return None
     return stop, target
 
 
@@ -546,42 +567,65 @@ def simulate(bars, info, cp, counters=None):
                         pend = None
             if fill is not None:
                 entry, kind = fill
-                lv = _levels(cp, pend["sig"], entry)
+                side = pend.get("side", "long")
+                lv = _levels(cp, pend["sig"], entry, side=side)
                 if lv is None:
                     bump("invalid_levels")
                 else:
-                    pos = _open(pend, d, t, entry, lv, kind)
+                    pos = _open(pend, d, t, entry, lv, kind, side=side)
                 pend = None
 
         # ---- 2. Manage open position during the bar
         exited = False
         if pos is not None and (pos["entry_i"] < t or pos["kind"] != "close"):
             entry_day = pos["entry_i"] == t
+            side = pos.get("side", "long")
             if tradable:
                 stop, target = pos["stop"], pos["target"]
                 if pos.get("exit_next_open") and not entry_day:
                     _close(pos, d, t, o, pos["exit_next_open"], True, trades)
                     exited = True
-                elif not entry_day and stop is not None and o <= stop:
-                    # Gap open below stop: exit at the open price, capturing full gap loss
-                    _close(pos, d, t, o, "trail" if pos["trailed"] else "stop", True, trades)
-                    exited = True
-                elif not entry_day and target is not None and o >= target:
-                    # Gap open above target: exit at the open price, capturing gap profit
-                    _close(pos, d, t, o, "target", True, trades)
-                    exited = True
-                else:
-                    hit_s = stop is not None and l <= stop
-                    # On entry day of buy_stop, the bar's high may have occurred before the fill
-                    hit_t = target is not None and h >= target and not (entry_day and pos["kind"] == "intraday")
-                    if hit_s and hit_t:
-                        bump("ambiguous")
-                    if hit_s:
-                        _close(pos, d, t, stop, "trail" if pos["trailed"] else "stop", False, trades)
+                elif side == "long":
+                    if not entry_day and stop is not None and o <= stop:
+                        # Gap open below stop: exit at the open price, capturing full gap loss
+                        _close(pos, d, t, o, "trail" if pos["trailed"] else "stop", True, trades)
                         exited = True
-                    elif hit_t:
-                        _close(pos, d, t, target, "target", False, trades)
+                    elif not entry_day and target is not None and o >= target:
+                        # Gap open above target: exit at the open price, capturing gap profit
+                        _close(pos, d, t, o, "target", True, trades)
                         exited = True
+                    else:
+                        hit_s = stop is not None and l <= stop
+                        # On entry day of buy_stop, the bar's high may have occurred before the fill
+                        hit_t = target is not None and h >= target and not (entry_day and pos["kind"] == "intraday")
+                        if hit_s and hit_t:
+                            bump("ambiguous")
+                        if hit_s:
+                            _close(pos, d, t, stop, "trail" if pos["trailed"] else "stop", False, trades)
+                            exited = True
+                        elif hit_t:
+                            _close(pos, d, t, target, "target", False, trades)
+                            exited = True
+                else:  # side == "short"
+                    if not entry_day and stop is not None and o >= stop:
+                        # Gap open above stop: exit at the open price, capturing full gap loss
+                        _close(pos, d, t, o, "trail" if pos["trailed"] else "stop", True, trades)
+                        exited = True
+                    elif not entry_day and target is not None and o <= target:
+                        # Gap open below target: exit at the open price, capturing gap profit
+                        _close(pos, d, t, o, "target", True, trades)
+                        exited = True
+                    else:
+                        hit_s = stop is not None and h >= stop
+                        hit_t = target is not None and l <= target and not (entry_day and pos["kind"] == "intraday")
+                        if hit_s and hit_t:
+                            bump("ambiguous")
+                        if hit_s:
+                            _close(pos, d, t, stop, "trail" if pos["trailed"] else "stop", False, trades)
+                            exited = True
+                        elif hit_t:
+                            _close(pos, d, t, target, "target", False, trades)
+                            exited = True
             if exited:
                 pos = None
             else:
@@ -592,7 +636,7 @@ def simulate(bars, info, cp, counters=None):
                     pos["held"] += 1
 
         # ---- 3. Compute day's fields only when needed
-        need_row = (pos is not None and not exited and (cp.exit or cp.trail[0] == "atr")) or \
+        need_row = (pos is not None and not exited and (cp.exit or cp.exit_short or cp.trail[0] == "atr")) or \
                    (pos is None and pend is None and d >= first_needed and (cp.end is None or d <= cp.end))
         row = _row(base, bar, bars, t, info, cp.need_static, cp.need_flags, cust) if (need_row and base.n) else None
 
@@ -600,24 +644,43 @@ def simulate(bars, info, cp, counters=None):
         if pos is not None and pos["entry_i"] <= t:
             if cp.trail[0] != "none" and tradable:
                 k, x = cp.trail
-                if k == "pct":
-                    ts = pos["hi"] * (1 - x / 100.0)
-                else:
-                    a = row.get("atr14") if row else None
-                    ts = pos["hi"] - x * a if a else None
-                if ts is not None and (pos["stop"] is None or ts > pos["stop"]):
-                    pos["stop"] = ts
-                    pos["trailed"] = True
+                side = pos.get("side", "long")
+                if side == "long":
+                    if k == "pct":
+                        ts = pos["hi"] * (1 - x / 100.0)
+                    else:
+                        a = row.get("atr14") if row else None
+                        ts = pos["hi"] - x * a if a else None
+                    if ts is not None and (pos["stop"] is None or ts > pos["stop"]):
+                        pos["stop"] = ts
+                        pos["trailed"] = True
+                else:  # short: trailing stop ratchets downward as lows deepen
+                    if k == "pct":
+                        ts = pos["lo"] * (1 + x / 100.0)
+                    else:
+                        a = row.get("atr14") if row else None
+                        ts = pos["lo"] + x * a if a else None
+                    if ts is not None and (pos["stop"] is None or ts < pos["stop"]):
+                        pos["stop"] = ts
+                        pos["trailed"] = True
             if cp.max_hold and pos["held"] >= cp.max_hold and tradable:
                 _close(pos, d, t, c, "time", False, trades)
                 exited = True
                 pos = None
-            elif cp.exit and row is not None and cp.exit(row):
+            elif pos.get("side") == "short" and cp.exit_short and row is not None and cp.exit_short(row):
+                pos["exit_next_open"] = "rule"
+            elif (pos.get("side", "long") == "long") and cp.exit and row is not None and cp.exit(row):
                 pos["exit_next_open"] = "rule"
 
         # ---- 5. Check for new trade signal at this close
         if row is not None and pos is None and pend is None and tradable and not exited:
-            if cp.entry(row):
+            allow_long = cp.action in ("BUY", "BOTH")
+            allow_short = cp.action in ("SHORT", "BOTH")
+            trig_long = allow_long and cp.entry(row)
+            trig_short = allow_short and (cp.entry_short(row) if cp.entry_short else (cp.action == "SHORT" and cp.entry(row)))
+
+            if trig_long or trig_short:
+                side = "long" if trig_long else "short"
                 bump("signals")
                 if (row.get("turnover") or 0) < cp.min_turnover:
                     bump("below_min_turnover")
@@ -627,7 +690,7 @@ def simulate(bars, info, cp, counters=None):
                            "target": cp.target_fn(row) if cp.target_fn else None,
                            "rank": row.get(cp.rank), "turnover": row.get("turnover")}
                     pend = {"sig": sig, "signal_date": d, "signal_i": t, "close": c,
-                            "left": cp.valid_days}
+                            "left": cp.valid_days, "side": side}
                     if cp.mode == "buy_stop":
                         lvl = cp.entry_level(row)
                         if lvl is None or lvl <= 0:
@@ -636,11 +699,11 @@ def simulate(bars, info, cp, counters=None):
                         else:
                             pend["level"] = lvl
                     elif cp.mode == "signal_close":
-                        lv = _levels(cp, sig, c)
+                        lv = _levels(cp, sig, c, side=side)
                         if lv is None:
                             bump("invalid_levels")
                         else:
-                            pos = _open(pend, d, t, c, lv, "close")
+                            pos = _open(pend, d, t, c, lv, "close", side=side)
                             pos["path"].append((d, c))
                         pend = None
         base.advance(bar)
@@ -652,11 +715,11 @@ def simulate(bars, info, cp, counters=None):
     return trades
 
 
-def _open(pend, d, t, entry, levels, kind):
+def _open(pend, d, t, entry, levels, kind, side="long"):
     """Initialize state dictionary for an active trade."""
     stop, target = levels
     return {"signal_date": pend["signal_date"], "entry_date": d, "entry_i": t, "entry": entry,
-            "stop0": stop, "stop": stop, "target": target, "kind": kind,
+            "side": side, "stop0": stop, "stop": stop, "target": target, "kind": kind,
             "rank": pend["sig"]["rank"], "turnover": pend["sig"]["turnover"],
             "hi": entry, "lo": entry, "held": 0, "trailed": False, "path": [], "exit_next_open": None}
 
@@ -666,25 +729,38 @@ def _close(pos, d, t, price, reason, at_open, trades, keep_path=True):
     Finalize an exited trade record and calculate return metrics.
 
     Why this was written:
-    Computes percentage return, R-multiple ((exit - entry) / risk), Maximum Favorable Excursion (MFE),
+    Computes percentage return, R-multiple, Maximum Favorable Excursion (MFE),
     Maximum Adverse Excursion (MAE), holding duration in sessions, and flags suspect data
-    (single-day moves > 45% indicative of splits).
+    (single-day moves > 45% indicative of splits). Handles both Long and Short positions.
     """
     pos["path"].append((d, price))
     hi = max(pos["hi"], price)
     lo = min(pos["lo"], price)
     e = pos["entry"]
+    side = pos.get("side", "long")
     closes = [pos["entry"]] + [p for _, p in pos["path"]]
     # Detect unadjusted corporate splits or dividend adjustments in Yahoo data
     suspect = any(b <= 0 or abs(b / a - 1) > SUSPECT_MOVE for a, b in zip(closes, closes[1:]) if a > 0)
-    risk = (e - pos["stop0"]) if pos["stop0"] is not None else None
+    if side == "long":
+        risk = (e - pos["stop0"]) if pos["stop0"] is not None else None
+        ret_pct = (price / e - 1) * 100.0
+        r = ((price - e) / risk) if risk else None
+        mfe_pct = (hi / e - 1) * 100.0
+        mae_pct = (lo / e - 1) * 100.0
+    else:  # short
+        risk = (pos["stop0"] - e) if pos["stop0"] is not None else None
+        ret_pct = (1.0 - price / e) * 100.0
+        r = ((e - price) / risk) if risk else None
+        mfe_pct = (1.0 - lo / e) * 100.0
+        mae_pct = (1.0 - hi / e) * 100.0
+
     trades.append({
         "signal_date": pos["signal_date"], "entry_date": pos["entry_date"], "entry": e,
-        "stop": pos["stop0"], "target": pos["target"], "exit_date": d, "exit": price, "reason": reason,
+        "side": side, "stop": pos["stop0"], "target": pos["target"], "exit_date": d, "exit": price, "reason": reason,
         "exit_at_open": at_open, "entry_kind": pos["kind"],
         "bars": t - pos["entry_i"] + (0 if pos["kind"] == "close" else 1) - (1 if at_open else 0),
-        "ret_pct": (price / e - 1) * 100.0, "r": ((price - e) / risk) if risk else None,
-        "mfe_pct": (hi / e - 1) * 100.0, "mae_pct": (lo / e - 1) * 100.0,
+        "ret_pct": ret_pct, "r": r,
+        "mfe_pct": mfe_pct, "mae_pct": mae_pct,
         "rank": pos["rank"], "turnover": pos["turnover"], "suspect": suspect,
         "path": pos["path"] if keep_path else None,
     })

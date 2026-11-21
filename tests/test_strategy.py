@@ -229,6 +229,28 @@ class TestCustomPeriods(unittest.TestCase):
         self.assertEqual(len(cs["high_35d"]), len(bars))
         self.assertEqual(len(cs["low_15d"]), len(bars))
 
+    def test_short_selling_execution(self):
+        bars = wave(300)
+        spec, _ = st.compile_strategy({
+            "action": "SHORT",
+            "instrument": {"mode": "symbol", "symbols": ["RELIANCE.NS"]},
+            "entry": {"type": "group", "op": "and", "items": [
+                {"type": "cond", "left": {"kind": "ind", "ind": "ema", "params": {"period": 5}},
+                 "op": "crosses_below", "right": {"kind": "ind", "ind": "ema", "params": {"period": 13}}}
+            ]},
+            "risk": {"stop": {"type": "pct", "value": 3}, "target": {"type": "pct", "value": 5}},
+            "execution": {"entry_mode": "next_open"},
+        })
+        cp = bt._Compiled(spec)
+        trades = bt.simulate(bars, {"sym": "W"}, cp)
+        self.assertGreater(len(trades), 0)
+        for tr in trades:
+            self.assertEqual(tr["side"], "short")
+            if tr["exit"] < tr["entry"]:
+                self.assertGreater(tr["ret_pct"], 0)
+            elif tr["exit"] > tr["entry"]:
+                self.assertLess(tr["ret_pct"], 0)
+
 
 class TestEngineFixes(unittest.TestCase):
     def test_merge_keeps_store_limit(self):
@@ -265,6 +287,37 @@ class TestEngineFixes(unittest.TestCase):
             self.assertGreater(res["every_signal"]["trades"], 0)
             self.assertEqual(res["benchmark"]["symbol"], "BTC-USD")
             self.assertFalse(any("survivorship" in w for w in res["warnings"]))
+
+
+class TestStrategyAPI(unittest.TestCase):
+    def test_plain_python_strategy_long_and_short(self):
+        from screener.strategy_api import BaseStrategy, Action, run_strategy, Bar, Position
+
+        class SimpleStrat(BaseStrategy):
+            def on_bar(self, bar: Bar, position: Position, indicators: dict):
+                # Buy on even multiples of 30, sell 10 bars later
+                if position.side == "flat":
+                    if bar.index % 40 == 10:
+                        return Action.BUY
+                    elif bar.index % 40 == 30:
+                        return Action.SHORT
+                elif position.side == "long" and position.bars_held >= 5:
+                    return Action.SELL
+                elif position.side == "short" and position.bars_held >= 5:
+                    return Action.COVER
+                return Action.HOLD
+
+        bars = wave(160)
+        res = run_strategy(SimpleStrat(), bars, capital=100000.0, stop_pct=2.0, target_pct=4.0)
+        self.assertGreater(res["trades_count"], 0)
+        self.assertIn("win_rate_pct", res)
+        self.assertIn("max_drawdown_pct", res)
+        self.assertEqual(len(res["equity_curve"]), len(bars))
+        
+        # Check that both long and short trades occurred
+        sides = {t["side"] for t in res["trades"]}
+        self.assertIn("long", sides)
+        self.assertIn("short", sides)
 
 
 if __name__ == "__main__":

@@ -407,14 +407,18 @@ def compile_strategy(ir):
     """
     if not isinstance(ir, dict):
         raise StrategyError("strategy must be a JSON object")
-    if (ir.get("action") or "BUY").upper() != "BUY":
-        raise StrategyError("action: only BUY (long) is supported so far")
+    action = (ir.get("action") or "BUY").upper()
+    if action not in ("BUY", "SHORT", "BOTH"):
+        raise StrategyError("action: must be BUY, SHORT or BOTH")
     if (ir.get("timeframe") or "1d") not in TIMEFRAMES:
         raise StrategyError("timeframe: only daily (1d) bars are supported so far")
-    entry = rule(ir.get("entry"), "entry")
+    entry_src = ir.get("entry") if action in ("BUY", "BOTH") else (ir.get("entry_short") or ir.get("entry"))
+    entry = rule(entry_src, "entry")
     if not entry:
         raise StrategyError("entry: add at least one condition")
     exit_ = rule(ir["exit"], "exit") if ir.get("exit") else ""
+    entry_short = rule(ir["entry_short"], "entry_short") if ir.get("entry_short") else ""
+    exit_short = rule(ir["exit_short"], "exit_short") if ir.get("exit_short") else ""
     ins = ir.get("instrument") or {}
     risk = ir.get("risk") or {}
     ex = ir.get("execution") or {}
@@ -422,7 +426,9 @@ def compile_strategy(ir):
     co = ir.get("costs") or {}
     per = ir.get("period") or {}
     spec = {
+        "action": action,
         "entry": entry, "exit": exit_,
+        "entry_short": entry_short, "exit_short": exit_short,
         "stop": _level(risk.get("stop"), "risk.stop", STOP_TYPES),
         "target": _level(risk.get("target"), "risk.target", TARGET_TYPES),
         "trail": _level(risk.get("trail"), "risk.trail", TRAIL_TYPES),
@@ -482,10 +488,10 @@ def compile_strategy(ir):
     spec["strategy"] = ir
     spec["name"] = str(ir.get("name") or "Untitled strategy")[:80]
     try:
-        _, warnings = backtest.prepare(spec)
+        prep, warnings = backtest.prepare(spec)
     except (backtest.SpecError, expr.ExprError) as e:
         raise StrategyError(str(e)) from None
-    return spec, warnings
+    return prep, warnings
 
 
 def describe(spec):
